@@ -1,3 +1,6 @@
+Awesome Physical and Virtual Networking Document: https://geek-university.com/vmware-esxi/physical-and-virtual-networking/
+
+
 https://www.cisco.com/c/dam/en_us/training-events/product-training/prime-infrastructure-31/ja-data-center/PI31-DataCenterMonitoringOverview-JobAid.pdf
 
 file:///U:/CM%20Plan/Data-Center-Monitoring-Overview.pdf
@@ -6,4 +9,12 @@ https://www.jonathanmedd.net/2012/01/basic-cluster-vmware-capacity-check-with-po
 
 https://kb.netapp.com/Advice_and_Troubleshooting/Data_Storage_Software/ONTAP_OS/What_are_SCSI_Reservations_and_SCSI_Persistent_Reservations%3F
 
+Network Adapters for Virtual Networks:  https://docs.vmware.com/en/VMware-vSphere/7.0/com.vmware.vsphere.vm_admin.doc/GUID-AF9E24A8-2CFA-447B-AC83-35D563119667.html
+
+
+Virtual Machines Administration Guide: https://docs.vmware.com/en/VMware-vSphere/7.0/vsphere-esxi-vcenter-server-702-virtual-machine-admin-guide.pdf
+
+Virtual Machine Networking: https://geek-university.com/vmware-esxi/types-of-virtual-network-adapters/
+
+Virtual Switches:  https://www.altaro.com/hyper-v/the-hyper-v-virtual-switch-explained-part-1/
 
