@@ -1,0 +1,279 @@
+#Run the script in individual vCenter for configurations
+start-transcript
+
+#Setting the path to 'T:\IT\CM\corresponding date
+$date=get-date -format yyyyMMdd
+$path1="T:\IT\CM\"
+mkdir $path1$date
+$path=$path1+$date+"\"
+cd $path
+cls
+
+#Import this module in the event that the script will be run in Powershell as opposed to PowerCLI
+Get-Module -Name VMware* -ListAvailable | Import-Module
+
+$vc='1**.**.***.*'
+
+<#
+#If there is need to automate the script or run off hours, you can import saved credentials for authentication
+
+$credspath="path\credentialsfile.txt"
+$filecreds=import-clixml -path $credspath
+
+#Now set Powercli to authenticate as :
+connect-viserver $vc -credential $filecreds
+#>
+
+connect-viserver $vc 
+$bgn=get-datacenter
+
+<# CLUSTERS INFORMATION #>
+
+$clusters=get-cluster|sort Name
+$clusts=foreach($clust in $clusters){get-cluster $clust|select @{N="ClusterName";E={$_.ExtensionData.Name}}, ParentFolder, @{N="OverallStatus";E={$_.ExtensionData.OverallStatus}}, @{N="ConfigStatus";E={$_.ExtensionData.ConfigStatus}}, @{N="AlarmActionsEnabled";E={$_.ExtensionData.AlarmActionsEnabled}}, @{N="NumHosts";E={$_.ExtensionData.summary.NumHosts}}, @{N="NumVmotions";E={$_.ExtensionData.summary.NumVmotions}}, @{N="NumCpuCores";E={$_.ExtensionData.summary.NumCpuCores}}, @{N="TotalCPUCapacityMhz";E={$_.ExtensionData.Summary.Usagesummary.TotalCPUCapacityMhz}}, @{N="CPUReservationMhz";E={$_.ExtensionData.Summary.Usagesummary.CPUReservationMhz}}, @{N="CPUDemandMhz";E={$_.ExtensionData.Summary.Usagesummary.CPUDemandMhz}}, @{N="CPUEntitledMhz";E={$_.ExtensionData.Summary.Usagesummary.CPUEntitledMhz}}, @{N="TotalMemCapacityMB";E={$_.ExtensionData.Summary.Usagesummary.TotalMemCapacityMB}}, @{N="MemReservationMB";E={$_.ExtensionData.Summary.Usagesummary.MemReservationMB}}, @{N="MemDemandMB";E={$_.ExtensionData.Summary.Usagesummary.MemDemandMB}}, @{N="MemEntitledMB";E={$_.ExtensionData.Summary.Usagesummary.MemEntitledMB}}, @{N="TotalVMCount";E={$_.ExtensionData.Summary.Usagesummary.TotalVMCount}}, @{N="PoweredOffVMCount";E={$_.ExtensionData.Summary.Usagesummary.PoweredOffVMCount}}, @{N="PoweredOffCPUReservationMhz";E={$_.ExtensionData.Summary.Usagesummary.PoweredOffCPUReservationMhz}}, @{N="PoweredOffMemReservationMB";E={$_.ExtensionData.Summary.Usagesummary.PoweredOffMemReservationMB}}, @{N="StatsGenNumber";E={$_.ExtensionData.Summary.Usagesummary.StatsGenNumber}},VsanEnabled, VsanDiskClaimMode, DrsEnabled, DrsMode,DrsAutomationLevel, HAEnabled, HAAdmissionControlEnabled, HAFailoverLevel,HARestartPriority, HAIsolationResponse, VMSwapfilePolicy, EVCMode}
+
+$pathclusts=$path+$vc+"-clusters.csv"
+cls
+$clusts|sort Name|export-csv $pathclusts -NoTypeInformation
+
+
+<# STORAGE CONFIGURATIONS #>
+
+#DataStores
+
+$datastores=get-datastore|sort Name
+$datastore=foreach($ds in $datastores){get-datastore $ds | select ParentFolder,Type, Name, State, Accessible, CapacityGB, @{N="UsedSpaceGB";E={[math]::Round($_.CapacityGB - $_.FreeSpaceGB,4)}}, @{N="UsedSpace%";E={[math]::Round(($_.CapacityGB - $_.FreeSpaceGB)/$_.CapacityGB*100,4)}}, @{N="FreeSpaceGB";E={[math]::Round($_.FreeSpaceGB,4)}}, @{N="FreeSpace%";E={[math]::Round($_.FreeSpaceGB/$_.CapacityGB*100,4)}}, FileSystemVersion, CongestionThresholdMillisecond}
+
+$pathdatastore=$path+$vc+"-datastores.csv"
+cls
+$datastore|sort name| export-csv $pathdatastore -NoTypeInformation
+
+#HardDisks
+$vms=Get-VM|sort PowerState, Name
+$harddiskreport=foreach ($vm in $vms){get-vm $vm|get-hardDisk|select @{N="VMName";E={$vm.Name}}, StorageFormat, Persistence, DiskType, @{N="Hard-Disk";E={$_.Name}}, @{N="DataStore";E={$vm.ExtensionData.config.DatastoreUrl.Name}}, @{N="CommittedGB";E={[math]::Round(($vm.ExtensionData.storage.perdatastoreusage.committed)/1gb,3)}}, CapacityGB, @{N="UnCommittedGB";E={[math]::Round(($vm.ExtensionData.storage.perdatastoreusage.uncommitted)/1gb,3)}},@{N="UnsharedGB";E={[math]::Round(($vm.ExtensionData.storage.perdatastoreusage.Unshared)/1gb,3)}}, @{N="VM Pathname";E={$vm.ExtensionData.Summary.config.vmpathname}},@{N="VMDK filePath";E={$_.filename}}, @{N="OverallCpuUsage" ;E={$vm.ExtensionData.summary.quickstats.OverallCpuUsage}}, @{N="OverallCpuDemand";E={$vm.ExtensionData.summary.quickstats.OverallCpuDemand}}, @{N="GuestMemoryUsage";E={$vm.ExtensionData.summary.quickstats.GuestMemoryUsage}}, @{N="HostMemoryUsage";E={$vm.ExtensionData.summary.quickstats.HostMemoryUsage}}} 
+
+$pathHardDisks=$path+$vc+"-Hard-Disks.csv"
+cls
+$harddiskreport | export-csv $pathHardDisks -NoTypeInformation
+
+# iSCSILun
+
+$vmhosts=get-vmhost|sort name
+$sclun=foreach($vmh in $vmhosts){get-vmhost $vmh|get-scsilun|select VMhost, @{N="VMHostNumCPU";E={$_.VMHost.NumCPU}}, IsLocal,LunType, @{N="ScsiDiskType";E={$_.ExtensionData.ScsiDiskType}},@{N="LocalDisk";E={$_.ExtensionData.localdisk}}, Model, Vendor , @{N="OperationalState";E={$_.ExtensionData.OperationalState}}, @{N="CapacityGB";E={[math]::Round($_.CapacityGB,4)}}, @{N="SSD";E={$_.ExtensionData.Ssd}}, MultipathPolicy}
+
+$pathScsiLun=$path+$vc+"-ScsiLun.csv"
+cls
+$sclun|export-csv $pathScsiLun -NoTypeInformation
+
+<# VMHOSTS #>
+
+$vmhosts=get-vmhost|sort Powerstate, Name
+$vmhs=foreach($vmh in $vmhosts){get-vmhost $vmh | select Parent,@{N="VMHostName";E={$_.Name}}, State, PowerState, IsStandAlone,NumCPU, CPUTotalMhz, CPUUsageMhz, @{N="CpuUsage%";E={[math]::Round($_.CPUUsageMhz/$_.CPUTotalMhz*100,2)}}, @{N="MemoryTotalGB";E={[math]::Round($_.MemoryTotalGB,4)}}, @{N="MemoryUsageGB";E={[math]::Round($_.MemoryUsageGB,4)}}, @{N="MemoryUsage%";E={[math]::Round($_.MemoryUsageGB/$_.MemoryTotalGB*100,2)}} ,Version, APIVersion, VMSwapFilePolicy, ProcessorType}
+
+$pathvmhs=$path+$vc+"-VMhosts.csv"
+cls
+$vmhs | export-csv $pathvmhs -NoTypeInformation
+
+cls
+<#
+#get vmhoststartpolicy
+
+$vmhoststartpolicy=foreach($vmh in $vmhs){get-cluster -vmhost $vmh|get-vmhost $vmh|Get-VMHostStartPolicy|select @{N="VMHostName";E={$vmh.Name}}, @{N="cluster";E={$vmh.parent.name}},Enabled, StartDelay, StopAction, WaitForHeartbeat, @{N="NumNICs";E={$vmh.extensiondata.summary.hardware.NumNICs}}, @{N="NumNICs";E={$vmh.extensiondata.summary.hardware.NumNICs}}}  
+
+#>
+
+<# VMs #>
+$vms=get-vm|sort Powerstate, Name
+$vmsNow=foreach($vm in $vms){get-VM $vm |select @{N="VMName";E={$_.ExtensionData.Config.Name}},NumCPU, @{N="FolderName";E={$_.Folder.Name}}, @{N="VMHostName";E={$_.VMhost.Name}}, @{N="GuestFamily";E={$_.ExtensionData.guest.GuestFamily}}, PowerState,@{N="Powered On";E={$_.ExtensionData.runtime.boottime}}, @{N="Uptime(Days)";E={(New-TimeSpan -Start $_.ExtensionData.Summary.Runtime.BootTime -End (Get-Date)) | Select-Object -ExpandProperty Days}}, MemoryGB, @{N="GuestMemoryUsage";E={$_.ExtensionData.Summary.Quickstats.GuestMemoryUsage}}, @{N="UsedSpaceGB";E={[math]::Round($_.usedSpaceGB,4)}}, @{N="ProvisionedSpaceGB";E={[math]::Round($_.ProvisionedSpaceGB,4)}}, @{N="DataStore";E={$_.ExtensionData.config.DatastoreUrl.Name}},@{N="vmPathName";E={$_.ExtensionData.Summary.config.vmpathname}},@{N="NumEthernetCards";E={$_.ExtensionData.Summary.config.NumEthernetCards}}, @{N="NumVirtualDisks";E={$_.ExtensionData.Summary.config.NumVirtualDisks}},@{N="Template";E={$_.ExtensionData.Summary.config.Template}},@{N="OverallStatus";E={$_.ExtensionData.Overallstatus}},@{N="ConfigStatus";E={$_.ExtensionData.Configstatus}},@{N="GuestHeartbeatStatus";E={$_.ExtensionData.GuestHeartbeatstatus}},@{N="IPAddress";E={$_.ExtensionData.Summary.guest.ipaddress}},@{N="CurrentSnapshotName";E={$_.ExtensionData.snapshot.rootsnapshotlist.Name}},@{N="SnapshotReplaySupported";E={$_.ExtensionData.snapshot.rootsnapshotlist.ReplaySupported}},@{N="SnapshotState";E={$_.ExtensionData.snapshot.rootsnapshotlist.State}},@{N="SnapshotCreateTme";E={$_.ExtensionData.snapshot.rootsnapshotlist.createTime}},@{N="SnapshotDescription";E={$_.ExtensionData.snapshot.rootsnapshotlist.Description}},@{N="VMVersion";E={$_.ExtensionData.config.version}}, @{N="VMToolsVersion";E={$_.ExtensionData.config.tools.ToolsVersion}}, @{N="VMToolsUpgradePolicy";E={$_.ExtensionData.config.tools.toolsupgradepolicy}}}
+
+$pathvmsNow=$path+$vc+"-VMs.csv"
+cls
+$vmsNow|export-csv $pathvmsNow -NoTypeInformation
+
+<# NETWORKING #>
+
+# Network Adapter
+
+$networkadapter=foreach($vm in $vms){get-vm $vm |get-NetworkAdapter |select @{N="NetworkAdapterName";E={$_.Name}}, @{N="NetworkAdapterType";E={$_.Type}}, NetworkName, @{N="NetworkAdapterMacAddress";E={$_.MacAddress}}, ConnectionState, WakeOnLanEnabled , @{N="VMName";E={$vm.Name}}}
+
+$pathnetworkadapter=$path+$vc+"-NetWork-Adapter.csv"
+cls
+$networkadapter|export-csv $pathnetworkadapter -NoTypeInformation
+
+# Virtual Distributed Switches (VDS)
+
+$vds=get-vdswitch|sort Name
+$vdswitcheach = foreach ($vd in $vds){get-vdswitch $vd |select @{N="VDSwitchName";E={$_.Name}}, Datacenter, Version,@{N="NumHosts";E={$_.Extensiondata.Summary.NumHosts}},Mtu, NumPorts, @{N="MaxPorts";E={$_.Extensiondata.config.MaxPorts}}, @{N="NumStandalonePorts";E={$_.Extensiondata.config.NumStandalonePorts}}, NumUplinkPorts, @{N="UplinkPortGroup";E={$_.Extensiondata.config.uplinkportgroup}},  @{N="ConfigStatus";E={$_.Extensiondata.ConfigStatus}}, @{N="OverallStatus";E={$_.ExtensionData.overallstatus}},   @{N="AlarmActionsEnabled";E={$_.Extensiondata.AlarmActionsEnabled}} , @{N="CreateTime";E={$_.Extensiondata.config.createtime}}, linkDiscoveryprotocol, LinkDiscoveryProtocolOperation,Folder}
+
+$pathvdswitcheach=$path+$vc+"-VDswitch.csv"
+cls
+$vdswitcheach|export-csv $pathvdswitcheach -NoTypeInformation
+
+
+# VDSwitch policies
+$vdswitchs=get-vdswitch
+$vdswitchpolicyreport=@()
+foreach ($vds in $vdswitchs){Get-VDSwitch $vds |foreach-object{ 
+
+$vdswitch=$_
+
+$row=""|select VDSwitch, AllowPromiscuous, AllowPromiscuousInherited, ForgedTransmits, ForgedTransmitsInherited, MacChanges, MacChangesInherited, VDBlocked, VDBlockedInherited, VDUplinkLacEnabled, VDUplinkLacMode 
+
+$row.vdSwitch=$vds.Name
+$row.AllowPromiscuous= ($vds|Get-VDSecurityPolicy).AllowPromiscuous 
+$row.AllowPromiscuousInherited=($vds|Get-VDSecurityPolicy).AllowPromiscuousInherited 
+$row.ForgedTransmits=($vds|Get-VDSecurityPolicy).ForgedTransmits 
+$row.ForgedTransmitsInherited=($vds|Get-VDSecurityPolicy).ForgedTransmitsInherited 
+$row.MacChanges=($vds|Get-VDSecurityPolicy).MacChanges
+$row.MacChangesInherited=($vds|Get-VDSecurityPolicy).MacChangesInherited
+$row.VDBlocked=($vds|Get-VDBlockedPolicy).Blocked 
+$row.VDBlockedInherited=($vds|Get-VDBlockedPolicy).BlockedInherited 
+$row.VDUplinkLacEnabled=($vds|Get-VDUplinkLacpPolicy).Enabled
+$row.VDUplinkLacMode=($vds|Get-VDUplinkLacpPolicy).Mode 
+
+$vdswitchpolicyreport+=$row 
+}}
+
+$pathvdswitchpolicyreport=$path+$vc+"-VDSwitch-Policy-Report.csv"
+cls
+$vdswitchpolicyreport|export-csv $pathvdswitchpolicyreport -NoTypeInformation
+
+# virtual Port Groups
+
+$vdpgs=get-vdportgroup|sort Name
+$vdpgall= foreach($vdpg in $vdpgs){Get-VDPortgroup $vdpg|select Datacenter,  VDSwitch, VirtualSwitch, @{N="VDPGName";E={$_.Extensiondata.Name}},  VlanConfiguration, NumPorts, IsUplink, PortBinding, @{N="OverallStatus";E={$_.ExtensionData.overallstatus}}, @{N="ConfigStatus";E={$_.Extensiondata.ConfigStatus}},@{N="Configversion";E={$_.Extensiondata.Config.configversion}}, @{N="ConfigType";E={$_.Extensiondata.Config.Type}},  @{N="Uplink";E={$_.Extensiondata.Config.uplink}}, @{N="Accessible";E={$_.ExtensionData.Summary.Accessible}}}
+
+$pathvdportgroupall=$path+$vc+"-VDPortgroup.csv"
+cls
+$vdpgall|export-csv $pathvdportgroupall -NoTypeInformation
+
+# Virtual Port Groups Policies
+
+$vportgolicyreport=@()
+foreach($vpg in $vdpgs){Get-VDPortgroup $vpg|foreach{ 
+$vpgsreport=$_
+$row=""|select Datacenter, VDSwitch, VDPortGroup, BlockOverrideAllowed, TrafficShapingOverrideAllowed, SecurityOverrideAllowed, VlanOverrideAllowed, UpLinkTeamingOverrideAllowed, ResetPortConfigAtDisconnect, VDBlocked, VDBlockedInherited, AllowPromiscuous, MacChanges, ForgedTransmits, VDUplinkLacEnabled, VDUPLinkLacMode, LoadBalancingPolicy, FailOverDetectionPolicy, NotifySwitches, EnableFailBack,ActiveUplinkPort
+$row.Datacenter=$vpg.Datacenter.Name 
+$row.VDSwitch=$vpg.VDSwitch 
+$row.VDPortGroup=$vpg.Name
+$row.BlockOverrideAllowed=($vpg|Get-VDPortgroupOverridePolicy).BlockOverrideAllowed
+$row.TrafficShapingOverrideAllowed=($vpg|Get-VDPortgroupOverridePolicy).TrafficShapingOverrideAllowed
+$row.SecurityOverrideAllowed=($vpg|Get-VDPortgroupOverridePolicy).SecurityOverrideAllowed
+$row.VlanOverrideAllowed=($vpg|Get-VDPortgroupOverridePolicy).VlanOverrideAllowed
+$row.UpLinkTeamingOverrideAllowed=($vpg|Get-VDPortgroupOverridePolicy).UplinkTeamingOverrideAllowed
+$row.ResetPortConfigAtDisconnect=($vpg|Get-VDPortgroupOverridePolicy).ResetPortConfigAtDisconnect
+$row.VDBlocked=($vpg|get-VDBlockedpolicy).blocked
+$row.VDBlockedInherited=($vpg|get-VDBlockedpolicy).BlockedInherited
+$row.AllowPromiscuous=($vpg|Get-VDSecurityPolicy).AllowPromiscuous
+$row.MacChanges=($vpg|Get-VDSecurityPolicy).MacChanges
+$row.ForgedTransmits=($vpg|Get-VDSecurityPolicy).ForgedTransmits
+$row.VDUplinkLacEnabled=($vpg|Get-VDUplinkLacpPolicy).Enabled
+$row.VDUpLinkLacMode=($vpg|Get-VDUplinkLacpPolicy).Mode
+$row.LoadBalancingPolicy=($vpg|Get-VDUplinkTeamingPolicy).LoadBalancingPolicy
+$row.FailOverDetectionPolicy=($vpg|Get-VDUplinkTeamingPolicy).FailoverDetectionPolicy
+$row.NotifySwitches=($vpg|Get-VDUplinkTeamingPolicy).NotifySwitches
+$row.EnableFailBack=($vpg|Get-VDUplinkTeamingPolicy).EnableFailback
+$row.ActiveUplinkPort=($vpg|Get-VDUplinkTeamingPolicy).ActiveUplinkPort 
+
+$vportgolicyreport+=$row
+}} 
+
+$pathvportgolicyreport=$path+$vc+"-VirtualPortGroup-Policy-Report.csv"
+cls
+$vportgolicyreport|export-csv $pathvportgolicyreport -NoTypeInformation
+
+
+
+
+{
+$vc='172.******'
+Function Test-WebServerSSL {
+# Function original location: 
+[CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true, Position = 0)]
+        [string]$URL,
+        [Parameter(Position = 1)]
+        [ValidateRange(1,65535)]
+        [int]$Port = 443,
+        [Parameter(Position = 2)]
+        [Net.WebProxy]$Proxy,
+        [Parameter(Position = 3)]
+        [int]$Timeout = 15000,
+        [switch]$UseUserContext
+    )
+Add-Type @"
+using System;
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+namespace PKI {
+    namespace Web {
+        public class WebSSL {
+            public Uri OriginalURi;
+            public Uri ReturnedURi;
+            public X509Certificate2 Certificate;
+            //public X500DistinguishedName Issuer;
+            //public X500DistinguishedName Subject;
+            public string Issuer;
+            public string Subject;
+            public string[] SubjectAlternativeNames;
+            public bool CertificateIsValid;
+            //public X509ChainStatus[] ErrorInformation;
+            public string[] ErrorInformation;
+            public HttpWebResponse Response;
+        }
+    }
+}
+"@
+    $ConnectString = "https://$url:$port"
+    $WebRequest = [Net.WebRequest]::Create($ConnectString)
+    $WebRequest.Proxy = $Proxy
+    $WebRequest.Credentials = $null
+    $WebRequest.Timeout = $Timeout
+    $WebRequest.AllowAutoRedirect = $true
+    [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+    try {$Response = $WebRequest.GetResponse()}
+    catch {}
+    if ($WebRequest.ServicePoint.Certificate -ne $null) {
+        $Cert = [Security.Cryptography.X509Certificates.X509Certificate2]$WebRequest.ServicePoint.Certificate.Handle
+        try {$SAN = ($Cert.Extensions | Where-Object {$_.Oid.Value -eq "2.5.29.17"}).Format(0) -split ", "}
+        catch {$SAN = $null}
+        $chain = New-Object Security.Cryptography.X509Certificates.X509Chain -ArgumentList (!$UseUserContext)
+        [void]$chain.ChainPolicy.ApplicationPolicy.Add("1.3.6.1.5.5.7.3.1")
+        $Status = $chain.Build($Cert)
+        New-Object PKI.Web.WebSSL -Property @{
+            OriginalUri = $ConnectString;
+            ReturnedUri = $Response.ResponseUri;
+            Certificate = $WebRequest.ServicePoint.Certificate;
+            Issuer = $WebRequest.ServicePoint.Certificate.Issuer;
+            Subject = $WebRequest.ServicePoint.Certificate.Subject;
+            SubjectAlternativeNames = $SAN;
+            CertificateIsValid = $Status;
+            Response = $Response;
+            ErrorInformation = $chain.ChainStatus | ForEach-Object {$_.Status}
+        }
+        $chain.Reset()
+        [Net.ServicePointManager]::ServerCertificateValidationCallback = $null
+    } else {
+        Write-Error $Error[0]
+    }
+}
+
+
+# Check for Host Certificates
+Get-VMHost | Foreach { Test-WebServerSSL -URL $_.Name | Select OriginalURi, CertificateIsValid, Issuer, @{N="Expires";E={$_.Certificate.NotAfter} }, @{N="DaysTillExpire";E={(New-TimeSpan -Start (Get-Date) -End ($_.Certificate.NotAfter)).Days} }}
+
+# Check for vCenter Certificate
+Test-WebServerSSL -URL $vc | Select OriginalURi, CertificateIsValid, Issuer, @{N="Expires";E={$_.Certificate.NotAfter} }, @{N="DaysTillExpire";E={(New-TimeSpan -Start (Get-Date) -End ($_.Certificate.NotAfter)).Days} }
+
+<#
+
+(I'm not actually positive the things Mark may want you to track, but I thought of the following)
+o	ePO Policies?
+o	Scan Compliance Percentage?
+o	Scan settings?
+
+
+#>
+}
+
