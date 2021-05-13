@@ -1,0 +1,210 @@
+
+       C:\PS>ConfirmIsVCenter
+       Throws exception if the connected VIServer is not vCenter Server.
+    #>
+
+    $SI = Get-View Serviceinstance
+    $VIType = $SI.Content.About.ApiType
+
+    if ($VIType -ne "VirtualCenter") {
+       Throw "Operation requires vCenter Server!"
+    }
+}
+
+Function ConfirmHardDiskIsValid {
+    <#
+    .SYNOPSIS
+       This function confirms the hard disks is valid.
+    .DESCRIPTION
+       This function confirms the hard disks is valid.
+    .PARAMETER VM
+       Specifies the VM which you want to used to validate against.
+    .PARAMETER HardDisk
+       Specifies the hard disks which you want to use to validate.
+    #>
+
+    [CmdLetBinding()]
+
+    Param (
+        [Parameter(Mandatory=$True)]
+        [VMware.VimAutomation.ViCore.Types.V1.Inventory.VirtualMachine] $VM,
+
+        [Parameter(Mandatory=$True)]
+        [VMware.VimAutomation.ViCore.Types.V1.VirtualDevice.HardDisk[]] $HardDisk
+    )
+
+    $NonVMHardDisks = $HardDisk|Where {$_.Parent -ne $VM}
+
+    if ($NonVMHardDisks.Length -ge 1) {
+       Throw "Some of the provided hard disks: $($NonVMHardDisks.FileName) do not belong to VM: $VM`n"
+    }
+}
+
+Function MatchKeys {
+   <#
+    .SYNOPSIS
+       This function checks whether the given keys matched or not.
+    .DESCRIPTION
+       This function checks whether the given keys matched or not with the provided KeyId or KMSClusterId.
+    .PARAMETER KeyToMatch
+       Specifies the CryptoKey to match for.
+    .PARAMETER KeyId
+       Specifies the keyId should be matched.
+    .PARAMETER KMSClusterId
+       Specifies the KMSClusterId should be matched.
+    .NOTES
+       Returns the true/false depends on the match result.
+       One of keyId or KMSClusterId parameter must be specified.
+    #>
+
+    [CmdLetBinding()]
+
+    Param (
+       [Parameter(Mandatory=$True,ValueFromPipeline=$True)]
+       [VMware.Vim.CryptoKeyId] $KeyToMatch,
+
+       [Parameter(Mandatory=$false)]
+       [String] $KeyId,
+
+       [Parameter(Mandatory=$false)]
+       [String] $KMSClusterId
+    )
+
+    Process {
+       if (!$KeyId -and !$KMSClusterId) {
+          Throw "One of the keyId or KMSClusterId must be specified!`n"
+       }
+
+       $Match = $True
+       if ($KeyId -and ($KeyId -ne $KeyToMatch.KeyId)) {
+           $Match = $false
+       }
+
+       if ($KMSClusterId) {
+          if (!$KeyToMatch.ProviderId) {
+              $Match = $false
+          }
+
+          if ($KMSClusterId -ne $KeyToMatch.ProviderId.Id) {
+              $Match = $false
+          }
+       }
+       return $Match
+    }
+}
+
+Function NewEncryptionKey {
+    <#
+    .SYNOPSIS
+       This function generates new encryption key from KMS.
+    .DESCRIPTION
+       This function generates new encryption from KMS, if no KMSClusterId specified the default KMS will be used.
+    .PARAMETER KMSClusterId
+       Specifies the KMS cluster id.
+    .EXAMPLE
+       C:\PS>NewEncryptionKey -KMSClusterId 'ClusterIdString'
+       Generates a new encryption key from the specified KMS which cluster id is 'ClusterIdString'.
+    #>
+
+    Param (
+        [Parameter(Mandatory=$False)]
+        [String]$KMSClusterId
+    )
+
+    # Confirm the connected VIServer is vCenter
+    ConfirmIsVCenter
+
+    # Get the cryptoManager of vCenter Server
+    $CM = GetCryptoManager
+    $ProviderId = New-Object VMware.Vim.KeyProviderId
+
+    Write-Verbose "Generate a CryptoKey.`n"
+    if ($KMSClusterId) {
+       $ProviderId.Id = $KMSClusterId
+    } else {
+       $ProviderId = $null
+    }
+
+    $KeyResult = $CM.GenerateKey($ProviderId)
+    if (!$keyResult.Success) {
+       Throw "Key generation failed, make sure the KMS Cluster exists!`n"
+    }
+    return $KeyResult
+}
+
+Function GetCryptoManager {
+    <#
+    .SYNOPSIS
+       This function retrieves the cryptoManager according to the given type.
+    .DESCRIPTION
+       This function retrieves the cryptoManager according to the given type.
+    .PARAMETER Type
+       Specifies the type of CryptoManager instance to get, the default value is KMS.
+    .EXAMPLE
+       C:\PS>GetCryptoManager -Type "CryptoManagerKmip"
+       Retrieves the 'CryptoManagerKmip' type CryptoManager.
+    #>
+
+    Param (
+        [Parameter(Mandatory=$false)]
+        [String] $Type
+    )
+
+    Process {
+       $SI = Get-View Serviceinstance
+       $CM = Get-View $SI.Content.CryptoManager
+       $cryptoMgrType = $CM.GetType().Name
+
+       if (!$Type) {
+          # As the type is not cared, so return the CM directly
+          return $CM
+       }
+       if ($cryptoMgrType -eq $Type) {
+          return $CM
+       }
+
+       Throw "Failed to get CryptoManager instance of the required type {$Type}!"
+    }
+}
+
+Function GetKeyIndex{
+    <#
+    .SYNOPSIS
+       This cmdlet returns the index to the key with a matching algorithm as the KeyType parameter
+    .DESCRIPTION
+       This cmdlet returns the index to the key with a matching algorithm as the KeyType parameter
+    .PARAMETER Certs
+       Specifies the list of certificats.  Expected format is byte[][]
+    .PARAMETER KeyType
+       Specifies the keytype to search for
+    .EXAMPLE
+       C:\PS>$keyIndex = GetKeyIndex $Certs RSA
+       C:\PS>$keyIndex = GetKeyIndex $Certs ECC
+    .NOTES
+       Author                                    : Chong Yeo.
+       Author email                              : cyeo@vmware.com
+    #>
+
+    [CmdLetBinding()]
+
+    param (
+        [Parameter(Mandatory=$True)]
+        [byte[][]] $Certs,
+
+        [Parameter(Mandatory=$True)]
+        [String] $KeyType
+    )
+    process {
+        for ($i=0;$i -lt $Certs.Length; $i++) {
+            $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate
+            $cert.Import($Certs.Get($i))
+            $certType = New-Object System.Security.Cryptography.Oid($cert.GetKeyAlgorithm())
+            if ( $certType.FriendlyName -eq $keyType) {
+                return $i
+            }
+        }
+        return -1
+    }
+}
+
+Export-ModuleMember *-*
