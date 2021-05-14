@@ -1,0 +1,788 @@
+#Run the script in individual vCenter for configurations
+start-transcript
+
+#Setting the path to 'T:\IT\CM\corresponding date
+$date=get-date -format yyyyMMdd
+$path1="T:\IT\CM\"
+mkdir $path1$date
+$path=$path1+$date+"\"
+cd $path
+cls
+
+#Import this module in the event that the script will be run in Powershell as opposed to PowerCLI
+Get-Module -Name VMware* -ListAvailable | Import-Module
+
+$vc='172.**.***.*'
+
+<#
+#If there is need to automate the script or run off hours, you can import saved credentials for authentication
+
+$credspath="path\credentialsfile.txt"
+$filecreds=import-clixml -path $credspath
+
+#Now set Powercli to authenticate as :
+connect-viserver $vc -credential $filecreds
+#>
+
+connect-viserver $vc 
+
+$bgn=get-datacenter
+
+<# CLUSTERS INFORMATION #>
+
+$clusters=get-cluster|sort Name
+$clusts=foreach($clust in $clusters){get-cluster $clust|select @{N="ClusterName";E={$_.ExtensionData.Name}}, ParentFolder, @{N="OverallStatus";E={$_.ExtensionData.OverallStatus}}, @{N="ConfigStatus";E={$_.ExtensionData.ConfigStatus}}, @{N="AlarmActionsEnabled";E={$_.ExtensionData.AlarmActionsEnabled}}, @{N="NumHosts";E={$_.ExtensionData.summary.NumHosts}}, @{N="NumVmotions";E={$_.ExtensionData.summary.NumVmotions}}, @{N="NumCpuCores";E={$_.ExtensionData.summary.NumCpuCores}}, @{N="TotalCPUCapacityMhz";E={$_.ExtensionData.Summary.Usagesummary.TotalCPUCapacityMhz}}, @{N="CPUReservationMhz";E={$_.ExtensionData.Summary.Usagesummary.CPUReservationMhz}}, @{N="CPUDemandMhz";E={$_.ExtensionData.Summary.Usagesummary.CPUDemandMhz}}, @{N="CPUEntitledMhz";E={$_.ExtensionData.Summary.Usagesummary.CPUEntitledMhz}}, @{N="TotalMemCapacityMB";E={$_.ExtensionData.Summary.Usagesummary.TotalMemCapacityMB}}, @{N="MemReservationMB";E={$_.ExtensionData.Summary.Usagesummary.MemReservationMB}}, @{N="MemDemandMB";E={$_.ExtensionData.Summary.Usagesummary.MemDemandMB}}, @{N="MemEntitledMB";E={$_.ExtensionData.Summary.Usagesummary.MemEntitledMB}}, @{N="TotalVMCount";E={$_.ExtensionData.Summary.Usagesummary.TotalVMCount}}, @{N="PoweredOffVMCount";E={$_.ExtensionData.Summary.Usagesummary.PoweredOffVMCount}}, @{N="PoweredOffCPUReservationMhz";E={$_.ExtensionData.Summary.Usagesummary.PoweredOffCPUReservationMhz}}, @{N="PoweredOffMemReservationMB";E={$_.ExtensionData.Summary.Usagesummary.PoweredOffMemReservationMB}}, @{N="StatsGenNumber";E={$_.ExtensionData.Summary.Usagesummary.StatsGenNumber}},VsanEnabled, VsanDiskClaimMode, DrsEnabled, DrsMode,DrsAutomationLevel, HAEnabled, HAAdmissionControlEnabled, HAFailoverLevel,HARestartPriority, HAIsolationResponse, VMSwapfilePolicy, EVCMode}
+
+$pathclusts=$path+$vc+"-clusters.csv"
+cls
+$clusts|sort Name|export-csv $pathclusts -NoTypeInformation
+
+
+<# STORAGE CONFIGURATIONS #>
+
+#DataStores
+
+$datastores=get-datastore|sort Name
+$datastore=foreach($ds in $datastores){get-datastore $ds | select ParentFolder,Type, Name, State, Accessible, CapacityGB, @{N="UsedSpaceGB";E={[math]::Round($_.CapacityGB - $_.FreeSpaceGB,4)}}, @{N="UsedSpace%";E={[math]::Round(($_.CapacityGB - $_.FreeSpaceGB)/$_.CapacityGB*100,4)}}, @{N="FreeSpaceGB";E={[math]::Round($_.FreeSpaceGB,4)}}, @{N="FreeSpace%";E={[math]::Round($_.FreeSpaceGB/$_.CapacityGB*100,4)}}, FileSystemVersion, CongestionThresholdMillisecond}
+
+$pathdatastore=$path+$vc+"-datastores.csv"
+cls
+$datastore|sort name| export-csv $pathdatastore -NoTypeInformation
+
+#HardDisks
+$vms=Get-VM|sort PowerState, Name
+$harddiskreport=foreach ($vm in $vms){get-vm $vm|get-hardDisk|select @{N="VMName";E={$vm.Name}}, StorageFormat, Persistence, DiskType, @{N="Hard-Disk";E={$_.Name}}, @{N="DataStore";E={$vm.ExtensionData.config.DatastoreUrl.Name}}, @{N="CommittedGB";E={[math]::Round(($vm.ExtensionData.storage.perdatastoreusage.committed)/1gb,3)}}, CapacityGB, @{N="UnCommittedGB";E={[math]::Round(($vm.ExtensionData.storage.perdatastoreusage.uncommitted)/1gb,3)}},@{N="UnsharedGB";E={[math]::Round(($vm.ExtensionData.storage.perdatastoreusage.Unshared)/1gb,3)}}, @{N="VM Pathname";E={$vm.ExtensionData.Summary.config.vmpathname}},@{N="VMDK filePath";E={$_.filename}}, @{N="OverallCpuUsage" ;E={$vm.ExtensionData.summary.quickstats.OverallCpuUsage}}, @{N="OverallCpuDemand";E={$vm.ExtensionData.summary.quickstats.OverallCpuDemand}}, @{N="GuestMemoryUsage";E={$vm.ExtensionData.summary.quickstats.GuestMemoryUsage}}, @{N="HostMemoryUsage";E={$vm.ExtensionData.summary.quickstats.HostMemoryUsage}}} 
+
+$pathHardDisks=$path+$vc+"-Hard-Disks.csv"
+cls
+$harddiskreport | export-csv $pathHardDisks -NoTypeInformation
+
+# iSCSILun
+
+$vmhosts=get-vmhost|sort name
+$sclun=foreach($vmh in $vmhosts){get-vmhost $vmh|get-scsilun|select VMhost, @{N="VMHostNumCPU";E={$_.VMHost.NumCPU}}, IsLocal,LunType, @{N="ScsiDiskType";E={$_.ExtensionData.ScsiDiskType}},@{N="LocalDisk";E={$_.ExtensionData.localdisk}}, Model, Vendor , @{N="OperationalState";E={$_.ExtensionData.OperationalState}}, @{N="CapacityGB";E={[math]::Round($_.CapacityGB,4)}}, @{N="SSD";E={$_.ExtensionData.Ssd}}, MultipathPolicy}
+
+$pathScsiLun=$path+$vc+"-ScsiLun.csv"
+cls
+$sclun|export-csv $pathScsiLun -NoTypeInformation
+
+<# VMHOSTS #>
+
+$vmhosts=get-vmhost|sort Powerstate, Name
+$vmhs=foreach($vmh in $vmhosts){get-vmhost $vmh | select Parent,@{N="VMHostName";E={$_.Name}}, State, PowerState, IsStandAlone,NumCPU, CPUTotalMhz, CPUUsageMhz, @{N="CpuUsage%";E={[math]::Round($_.CPUUsageMhz/$_.CPUTotalMhz*100,2)}}, @{N="MemoryTotalGB";E={[math]::Round($_.MemoryTotalGB,4)}}, @{N="MemoryUsageGB";E={[math]::Round($_.MemoryUsageGB,4)}}, @{N="MemoryUsage%";E={[math]::Round($_.MemoryUsageGB/$_.MemoryTotalGB*100,2)}} ,Version, APIVersion, VMSwapFilePolicy, ProcessorType}
+
+$pathvmhs=$path+$vc+"-VMhosts.csv"
+cls
+$vmhs | export-csv $pathvmhs -NoTypeInformation
+
+cls
+<#
+#get vmhoststartpolicy
+
+$vmhoststartpolicy=foreach($vmh in $vmhs){get-cluster -vmhost $vmh|get-vmhost $vmh|Get-VMHostStartPolicy|select @{N="VMHostName";E={$vmh.Name}}, @{N="cluster";E={$vmh.parent.name}},Enabled, StartDelay, StopAction, WaitForHeartbeat, @{N="NumNICs";E={$vmh.extensiondata.summary.hardware.NumNICs}}, @{N="NumNICs";E={$vmh.extensiondata.summary.hardware.NumNICs}}}  
+
+#>
+
+<# VMs #>
+$vms=get-vm|sort Powerstate, Name
+$vmsNow=foreach($vm in $vms){get-VM $vm |select @{N="VMName";E={$_.ExtensionData.Config.Name}},NumCPU, @{N="FolderName";E={$_.Folder.Name}},@{N="ClusterName";E={(Get-Cluster -VM $vm).Name}}, @{N="VMHostName";E={$_.VMhost.Name}}, @{N="GuestFamily";E={$_.ExtensionData.guest.GuestFamily}}, PowerState,@{N="Powered On";E={$_.ExtensionData.runtime.boottime}}, @{N="Uptime(Days)";E={(New-TimeSpan -Start $_.ExtensionData.Summary.Runtime.BootTime -End (Get-Date)) | Select-Object -ExpandProperty Days}}, MemoryGB, @{N="GuestMemoryUsage";E={$_.ExtensionData.Summary.Quickstats.GuestMemoryUsage}}, @{N="UsedSpaceGB";E={[math]::Round($_.usedSpaceGB,4)}}, @{N="ProvisionedSpaceGB";E={[math]::Round($_.ProvisionedSpaceGB,4)}}, @{N="DataStore";E={$_.ExtensionData.config.DatastoreUrl.Name}},@{N="vmPathName";E={$_.ExtensionData.Summary.config.vmpathname}},@{N="NumEthernetCards";E={$_.ExtensionData.Summary.config.NumEthernetCards}}, @{N="NumVirtualDisks";E={$_.ExtensionData.Summary.config.NumVirtualDisks}},@{N="Template";E={$_.ExtensionData.Summary.config.Template}},@{N="OverallStatus";E={$_.ExtensionData.Overallstatus}},@{N="ConfigStatus";E={$_.ExtensionData.Configstatus}},@{N="GuestHeartbeatStatus";E={$_.ExtensionData.GuestHeartbeatstatus}},@{N="IPAddress";E={$_.ExtensionData.Summary.guest.ipaddress}},@{N="CurrentSnapshotName";E={$_.ExtensionData.snapshot.rootsnapshotlist.Name}},@{N="SnapshotReplaySupported";E={$_.ExtensionData.snapshot.rootsnapshotlist.ReplaySupported}},@{N="SnapshotState";E={$_.ExtensionData.snapshot.rootsnapshotlist.State}},@{N="SnapshotCreateTme";E={$_.ExtensionData.snapshot.rootsnapshotlist.createTime}},@{N="SnapshotDescription";E={$_.ExtensionData.snapshot.rootsnapshotlist.Description}},@{N="VMVersion";E={$_.ExtensionData.config.version}}, @{N="VMToolsVersion";E={$_.ExtensionData.config.tools.ToolsVersion}}, @{N="VMToolsUpgradePolicy";E={$_.ExtensionData.config.tools.toolsupgradepolicy}}}
+
+$pathvmsNow=$path+$vc+"-VMs.csv"
+cls
+$vmsNow|export-csv $pathvmsNow -NoTypeInformation
+
+<# NETWORKING #>
+
+# Network Adapter
+
+$networkadapter=foreach($vm in $vms){get-vm $vm |get-NetworkAdapter |select @{N="NetworkAdapterName";E={$_.Name}}, @{N="NetworkAdapterType";E={$_.Type}}, NetworkName, @{N="NetworkAdapterMacAddress";E={$_.MacAddress}}, ConnectionState, WakeOnLanEnabled , @{N="VMName";E={$vm.Name}}}
+
+$pathnetworkadapter=$path+$vc+"-NetWork-Adapter.csv"
+cls
+$networkadapter|export-csv $pathnetworkadapter -NoTypeInformation
+
+# Virtual Distributed Switches (VDS)
+
+$vds=get-vdswitch|sort Name
+$vdswitcheach = foreach ($vd in $vds){get-vdswitch $vd |select @{N="VDSwitchName";E={$_.Name}}, Datacenter, Version,@{N="NumHosts";E={$_.Extensiondata.Summary.NumHosts}},Mtu, NumPorts, @{N="MaxPorts";E={$_.Extensiondata.config.MaxPorts}}, @{N="NumStandalonePorts";E={$_.Extensiondata.config.NumStandalonePorts}}, NumUplinkPorts, @{N="UplinkPortGroup";E={$_.Extensiondata.config.uplinkportgroup}},  @{N="ConfigStatus";E={$_.Extensiondata.ConfigStatus}}, @{N="OverallStatus";E={$_.ExtensionData.overallstatus}},   @{N="AlarmActionsEnabled";E={$_.Extensiondata.AlarmActionsEnabled}} , @{N="CreateTime";E={$_.Extensiondata.config.createtime}}, linkDiscoveryprotocol, LinkDiscoveryProtocolOperation,Folder}
+
+$pathvdswitcheach=$path+$vc+"-VDswitch.csv"
+cls
+$vdswitcheach|export-csv $pathvdswitcheach -NoTypeInformation
+
+
+# VDSwitch policies
+$vdswitchs=get-vdswitch
+$vdswitchpolicyreport=@()
+foreach ($vds in $vdswitchs){Get-VDSwitch $vds |foreach-object{ 
+
+$vdswitch=$_
+
+$row=""|select VDSwitch, AllowPromiscuous, AllowPromiscuousInherited, ForgedTransmits, ForgedTransmitsInherited, MacChanges, MacChangesInherited, VDBlocked, VDBlockedInherited, VDUplinkLacEnabled, VDUplinkLacMode 
+
+$row.vdSwitch=$vds.Name
+$row.AllowPromiscuous= ($vds|Get-VDSecurityPolicy).AllowPromiscuous 
+$row.AllowPromiscuousInherited=($vds|Get-VDSecurityPolicy).AllowPromiscuousInherited 
+$row.ForgedTransmits=($vds|Get-VDSecurityPolicy).ForgedTransmits 
+$row.ForgedTransmitsInherited=($vds|Get-VDSecurityPolicy).ForgedTransmitsInherited 
+$row.MacChanges=($vds|Get-VDSecurityPolicy).MacChanges
+$row.MacChangesInherited=($vds|Get-VDSecurityPolicy).MacChangesInherited
+$row.VDBlocked=($vds|Get-VDBlockedPolicy).Blocked 
+$row.VDBlockedInherited=($vds|Get-VDBlockedPolicy).BlockedInherited 
+$row.VDUplinkLacEnabled=($vds|Get-VDUplinkLacpPolicy).Enabled
+$row.VDUplinkLacMode=($vds|Get-VDUplinkLacpPolicy).Mode 
+
+$vdswitchpolicyreport+=$row 
+}}
+
+$pathvdswitchpolicyreport=$path+$vc+"-VDSwitch-Policy-Report.csv"
+cls
+$vdswitchpolicyreport|export-csv $pathvdswitchpolicyreport -NoTypeInformation
+
+# virtual Port Groups
+
+$vdpgs=get-vdportgroup|sort Name
+$vdpgall= foreach($vdpg in $vdpgs){Get-VDPortgroup $vdpg|select Datacenter,  VDSwitch, VirtualSwitch, @{N="VDPGName";E={$_.Extensiondata.Name}},  VlanConfiguration, NumPorts, IsUplink, PortBinding, @{N="OverallStatus";E={$_.ExtensionData.overallstatus}}, @{N="ConfigStatus";E={$_.Extensiondata.ConfigStatus}},@{N="Configversion";E={$_.Extensiondata.Config.configversion}}, @{N="ConfigType";E={$_.Extensiondata.Config.Type}},  @{N="Uplink";E={$_.Extensiondata.Config.uplink}}, @{N="Accessible";E={$_.ExtensionData.Summary.Accessible}}}
+
+$pathvdportgroupall=$path+$vc+"-VDPortgroup.csv"
+cls
+$vdpgall|export-csv $pathvdportgroupall -NoTypeInformation
+
+# Virtual Port Groups Policies
+
+$vportgolicyreport=@()
+foreach($vpg in $vdpgs){Get-VDPortgroup $vpg|foreach{ 
+$vpgsreport=$_
+$row=""|select Datacenter, VDSwitch, VDPortGroup, BlockOverrideAllowed, TrafficShapingOverrideAllowed, SecurityOverrideAllowed, VlanOverrideAllowed, UpLinkTeamingOverrideAllowed, ResetPortConfigAtDisconnect, VDBlocked, VDBlockedInherited, AllowPromiscuous, MacChanges, ForgedTransmits, VDUplinkLacEnabled, VDUPLinkLacMode, LoadBalancingPolicy, FailOverDetectionPolicy, NotifySwitches, EnableFailBack,ActiveUplinkPort
+$row.Datacenter=$vpg.Datacenter.Name 
+$row.VDSwitch=$vpg.VDSwitch 
+$row.VDPortGroup=$vpg.Name
+$row.BlockOverrideAllowed=($vpg|Get-VDPortgroupOverridePolicy).BlockOverrideAllowed
+$row.TrafficShapingOverrideAllowed=($vpg|Get-VDPortgroupOverridePolicy).TrafficShapingOverrideAllowed
+$row.SecurityOverrideAllowed=($vpg|Get-VDPortgroupOverridePolicy).SecurityOverrideAllowed
+$row.VlanOverrideAllowed=($vpg|Get-VDPortgroupOverridePolicy).VlanOverrideAllowed
+$row.UpLinkTeamingOverrideAllowed=($vpg|Get-VDPortgroupOverridePolicy).UplinkTeamingOverrideAllowed
+$row.ResetPortConfigAtDisconnect=($vpg|Get-VDPortgroupOverridePolicy).ResetPortConfigAtDisconnect
+$row.VDBlocked=($vpg|get-VDBlockedpolicy).blocked
+$row.VDBlockedInherited=($vpg|get-VDBlockedpolicy).BlockedInherited
+$row.AllowPromiscuous=($vpg|Get-VDSecurityPolicy).AllowPromiscuous
+$row.MacChanges=($vpg|Get-VDSecurityPolicy).MacChanges
+$row.ForgedTransmits=($vpg|Get-VDSecurityPolicy).ForgedTransmits
+$row.VDUplinkLacEnabled=($vpg|Get-VDUplinkLacpPolicy).Enabled
+$row.VDUpLinkLacMode=($vpg|Get-VDUplinkLacpPolicy).Mode
+$row.LoadBalancingPolicy=($vpg|Get-VDUplinkTeamingPolicy).LoadBalancingPolicy
+$row.FailOverDetectionPolicy=($vpg|Get-VDUplinkTeamingPolicy).FailoverDetectionPolicy
+$row.NotifySwitches=($vpg|Get-VDUplinkTeamingPolicy).NotifySwitches
+$row.EnableFailBack=($vpg|Get-VDUplinkTeamingPolicy).EnableFailback
+$row.ActiveUplinkPort=($vpg|Get-VDUplinkTeamingPolicy).ActiveUplinkPort 
+
+$vportgolicyreport+=$row
+}} 
+
+$pathvportgolicyreport=$path+$vc+"-VirtualPortGroup-Policy-Report.csv"
+cls
+$vportgolicyreport|export-csv $pathvportgolicyreport -NoTypeInformation
+
+
+<# FUNCTIONS #>
+
+# CPU Over Commit
+
+function Get-CPUOvercommit {
+<# .EXAMPLE : Get-CPUOvercommit -Cluster Prod OR  Get-VMHost '172.1*.***.**' | Get-CPUOvercommit OR  Get-CPUOvercommit -Quiet   #>
+    [cmdletbinding()]
+    param(
+    [string]$VIServer = "localhost",
+    [Parameter(ValueFromPipeline = $True,
+    ValueFromPipelineByPropertyName=$True,
+    Position=0)]
+    [Alias('Hosts','Servers')]
+    [VMware.VimAutomation.ViCore.Impl.V1.Inventory.VMHostImpl[]]$VMhosts,
+    [string]$Cluster,
+    [switch]$Quiet
+    )
+
+    Begin {
+        if(-not (Get-PSSnapin VMware.VimAutomation.Core -ErrorAction SilentlyContinue)) {
+            Add-PSSnapin VMware.VimAutomation.Core }
+
+        Set-PowercliConfiguration -InvalidCertificateAction "Ignore" -DisplayDeprecationWarnings:$false -Confirm:$false | Out-Null
+
+        If (-not($defaultVIServer)) {
+            Connect-VIServer $VIServer
+        }
+        Else {
+            Write-Host "Already connected the vCenter Server: $defaultVIServer" 
+        }
+        # Clearing the default parameter values in the function's scope
+        $PSDefaultParameterValues.Clear()
+
+        If (-not ($PSBoundParameters.ContainsKey('VMhosts')) ) {
+            $VMhosts = Get-VMHost
+        }
+        # Getting all hosts from the cluster(s) if the -Cluster parameter is specified
+        If ($PSBoundParameters.ContainsKey('Cluster')) {
+            $VMhosts = Get-Cluster -Name $Cluster | Get-VMHost
+        }
+        # Preparing a collection to store information for each individual ESXi host
+        $OvercommitInfoCollection = @()
+    }
+    Process {
+
+        Foreach ($VMhost in $VMhosts) {
+
+            $HostPoweredOnvCPUs = (Get-VM -Location $VMhost | Where-Object {$_.PowerState -eq "PoweredOn" } | Measure-Object NumCpu -Sum).Sum
+            Write-Host "`$HostPoweredOnvCPUs for $VMhost is : $HostPoweredOnvCPUs"
+
+            # Building the properties for our custom object            
+            $OvercommitInfoProperties = [ordered]@{'VMHost'=$VMhost.Name                    
+                    'CPU-Cores'=$VMhost.NumCpu
+                    'Total-vCPUs'=(Get-VM -Location $VMhost | Measure-Object NumCpu -Sum).Sum
+                    'PoweredOn-vCPUs'=if ($HostPoweredOnvCPUs) {$HostPoweredOnvCPUs} Else { 0 -as [int] }
+                    'vCPU/Core-ratio'=if ($HostPoweredOnvCPUs) {[Math]::Round(($HostPoweredOnvCPUs / $VMhost.NumCpu), 3)} Else { $null }
+                    'CPU-Overcommit (%)'=if ($HostPoweredOnvCPUs) {[Math]::Round(100*(($HostPoweredOnvCPUs - $VMhost.NumCpu) / $VMhost.NumCpu), 3)} Else { $null }
+                    }           
+
+            # Building a custom object from the list of properties above
+            $OvercommitInfoObj = New-Object -TypeName PSObject -Property $OvercommitInfoProperties
+
+            If ($Quiet) {
+                $OvercommitInfoBoolean = $HostPoweredOnvCPUs -gt $VMhost.NumCpu
+                $OvercommitInfoCollection += $OvercommitInfoBoolean
+            }            
+            Else {  
+                $OvercommitInfoCollection += $OvercommitInfoObj
+            }
+        }
+    }
+    End {
+        If ($PSBoundParameters.ContainsKey('Cluster')) {
+
+            $ClusterPoweredOnvCPUs = (Get-VM -Location $Cluster | Where-Object {$_.PowerState -eq "PoweredOn" } | Measure-Object NumCpu -Sum).Sum
+            $ClusterCPUCores = ($VMhosts | Measure-Object NumCpu -Sum).Sum
+            Write-Host "`$ClusterPoweredOnvCPUs for $Cluster is : $ClusterPoweredOnvCPUs"
+            Write-Host "`$ClusterCPUCores for $Cluster is : $ClusterCPUCores"
+
+            # Building a custom object specific to the -Cluster parameter
+            $ClusterOvercommitProperties = [ordered]@{'Cluster Name'=$Cluster                    
+                    'CPU-Cores'=$ClusterCPUCores
+                    'Total-vCPUs'=($OvercommitInfoCollection."Total vCPUs" | Measure-Object -Sum).Sum
+                    'PoweredOn-vCPUs'=if ($ClusterPoweredOnvCPUs) {$ClusterPoweredOnvCPUs} Else { 0 -as [int] }
+                    'vCPU/Core-ratio'=if ($ClusterPoweredOnvCPUs) {[Math]::Round(($ClusterPoweredOnvCPUs / $ClusterCPUCores), 3)} Else { $null }
+                    'CPU-Overcommit (%)'=if ($ClusterPoweredOnvCPUs) {[Math]::Round(100*(( $ClusterPoweredOnvCPUs - $ClusterCPUCores) / $ClusterCPUCores), 3)} Else { $null }
+                    }     
+
+            $ClusterOvercommitObj = New-Object -TypeName PSObject -Property $ClusterOvercommitProperties
+
+            If ($Quiet) {
+                $ClusterOvercommitBoolean = $ClusterPoweredOnvCPUs -gt $ClusterCPUCores
+                $ClusterOvercommitBoolean
+            }
+
+            Else { $ClusterOvercommitObj
+            }
+        }
+        Else { $OvercommitInfoCollection }
+    }
+}
+
+# Memory Over Commit
+
+function Get-MemoryOvercommit {
+<# .EXAMPLE: Get-MemoryOvercommit -Cluster Prod OR Get-VMHost '172.**.***.**' | Get-MemoryOvercommit OR Get-MemoryOvercommit -Quiet #>
+
+    [cmdletbinding()]
+    param(
+    [string]$VIServer = "localhost",
+    [Parameter(ValueFromPipeline = $True,
+    ValueFromPipelineByPropertyName=$True,
+    Position=0)]
+    [Alias('Hosts','Servers')]
+    [VMware.VimAutomation.ViCore.Impl.V1.Inventory.VMHostImpl[]]$VMhosts,
+    [string]$Cluster,
+    [switch]$Quiet
+    )
+
+    Begin {
+        if(-not (Get-PSSnapin VMware.VimAutomation.Core -ErrorAction SilentlyContinue)) {
+            Add-PSSnapin VMware.VimAutomation.Core }
+
+        Set-PowercliConfiguration -InvalidCertificateAction "Ignore" -DisplayDeprecationWarnings:$false -Confirm:$false | Out-Null
+
+        If (-not($defaultVIServer)) {
+            Connect-VIServer $VIServer
+        }
+        Else {
+            Write-Host "Already connected the vCenter Server: $defaultVIServer" 
+        }
+        # Clearing the default parameter values in the function's scope
+        $PSDefaultParameterValues.Clear()
+
+        If (-not ($PSBoundParameters.ContainsKey('VMhosts')) ) {
+            $VMhosts = Get-VMHost
+        }
+        # Getting all hosts from the cluster(s) if the -Cluster parameter is specified
+        If ($PSBoundParameters.ContainsKey('Cluster')) {
+            $VMhosts = Get-Cluster -Name $Cluster | Get-VMHost
+        }
+        # Preparing a collection to store information for each individual ESXi host
+        $OvercommitInfoCollection = @()
+    }
+
+    Process {
+
+        Foreach ($VMhost in $VMhosts) {
+
+            $PhysRAM = [Math]::Round($VMhost.MemoryTotalGB, 2)
+            $HostPoweredOnvRAM = [Math]::Round((Get-VM -Location $VMhost | Where-Object {$_.PowerState -eq "PoweredOn" } | Measure-Object MemoryGB -Sum).Sum, 2)
+            Write-Verbose "`$PhysRAM for $VMhost is : $PhysRAM"
+            Write-Verbose "`$HostPoweredOnvRAM for $VMhost is : $HostPoweredOnvRAM"
+
+            # Building the properties for our custom object
+            $OvercommitInfoProperties = [ordered]@{'ESXi Host'=$VMhost.Name                    
+                    'Physical RAM (GB)'=$PhysRAM
+                    'Total vRAM (GB)'=[Math]::Round((Get-VM -Location $VMhost | Measure-Object MemoryGB -Sum).Sum, 2)
+                    'PoweredOn vRAM (GB)'=if ($HostPoweredOnvRAM) {$HostPoweredOnvRAM} Else { 0 -as [int] }
+                    'vRAM/Physical RAM ratio'=if ($HostPoweredOnvRAM) {[Math]::Round(($HostPoweredOnvRAM / $PhysRAM), 3)} Else { $null }
+                    'RAM Overcommit (%)'=if ($HostPoweredOnvRAM) {[Math]::Round(100*(($HostPoweredOnvRAM - $PhysRAM) / $PhysRAM), 2)} Else { $null }
+                    }           
+
+            # Building a custom object from the list of properties above
+            $OvercommitInfoObj = New-Object -TypeName PSObject -Property $OvercommitInfoProperties
+
+            If ($Quiet) {
+                $OvercommitInfoBoolean = $HostPoweredOnvRAM -gt $PhysRAM
+                $OvercommitInfoCollection += $OvercommitInfoBoolean
+            }
+            Else {  
+                $OvercommitInfoCollection += $OvercommitInfoObj
+            }
+        }
+    }
+    End {
+        If ($PSBoundParameters.ContainsKey('Cluster')) {
+
+            $ClusterPoweredOnvRAM = [Math]::Round((Get-VM -Location $Cluster | Where-Object {$_.PowerState -eq "PoweredOn" } | Measure-Object MemoryGB -Sum).Sum, 2)
+            $ClusterPhysRAM = [Math]::Round(($VMhosts | Measure-Object MemoryTotalGB -Sum).Sum, 2)
+            Write-Host "`$ClusterPoweredOnvRAM for $Cluster is : $ClusterPoweredOnvRAM"
+            Write-Host "`$ClusterPhysRAM for $Cluster is : $ClusterPhysRAM"
+
+            # Building a custom object specific to the -Cluster parameter
+            $ClusterOvercommitProperties = [ordered]@{'Cluster Name'=$Cluster                    
+                    'Physical RAM (GB)'=$ClusterPhysRAM
+                    'Total vRAM (GB)'=[Math]::Round(($OvercommitInfoCollection."Total vRAM (GB)" | Measure-Object -Sum).Sum, 2)
+                    'PoweredOn vRAM (GB)'=if ($ClusterPoweredOnvRAM) {$ClusterPoweredOnvRAM} Else { 0 -as [int] }
+                    'vRAM/Physical RAM ratio'=if ($ClusterPoweredOnvRAM) {[Math]::Round(($ClusterPoweredOnvRAM / $ClusterPhysRAM), 3)} Else { $null }
+                    'RAM Overcommit (%)'=if ($ClusterPoweredOnvRAM) {[Math]::Round(100*(( $ClusterPoweredOnvRAM - $ClusterPhysRAM) / $ClusterPhysRAM), 2)} Else { $null }
+                    }     
+
+            $ClusterOvercommitObj = New-Object -TypeName PSObject -Property $ClusterOvercommitProperties
+
+            If ($Quiet) {
+                $ClusterOvercommitBoolean = $ClusterPoweredOnvRAM -gt $ClusterPhysRAM
+                $ClusterOvercommitBoolean
+            }
+
+            Else { $ClusterOvercommitObj
+            }
+        }
+        Else { $OvercommitInfoCollection }
+    }
+}
+
+# Storage Over Commit
+function Get-StorageOvercommit {
+
+<#
+.DESCRIPTION: 
+    Obtains the used space, provisioned space and capacity for one or more datastores and compares them to evaluate storage overcommitment.
+    This storage overcommitment is possible only when there are thin provisioned VMDKs and this doesn't take into account thin provisioning at the LUN level which may be provided by the storage array.
+    The VMs provisioned space includes the space provisioned for all VMDKs, snapshots, linked clones, swap files and VM logs.
+.EXAMPLE 
+    Get-StorageOvercommit -Cluster Production OR Get-Datastore *** | Get-StorageOvercommit OR Get-StorageOvercommit -Quiet {outputs a boolean value stating whether there is storage overcommitment or not, for each datastore managed by the connected vCenter Server}
+  #>
+
+    [cmdletbinding()]
+    param(
+    [string]$VIServer = "localhost",
+    [Parameter(ValueFromPipeline = $True,
+    ValueFromPipelineByPropertyName=$True,
+    Position=0)]
+    [Alias('Storage')]
+    [VMware.VimAutomation.ViCore.Impl.V1.DatastoreManagement.VmfsDatastoreImpl[]]$Datastore,
+    [string]$Cluster,
+    [switch]$Quiet
+    )
+
+    Begin {
+        if(-not (Get-PSSnapin VMware.VimAutomation.Core -ErrorAction SilentlyContinue)) {
+            Add-PSSnapin VMware.VimAutomation.Core }
+
+        Set-PowercliConfiguration -InvalidCertificateAction "Ignore" -DisplayDeprecationWarnings:$false -Confirm:$false | Out-Null
+
+        If (-not($defaultVIServer)) {
+            Connect-VIServer $VIServer
+        }
+        Else {
+            Write-Host "Already connected the vCenter Server: $defaultVIServer" 
+        }
+        # Clearing the default parameter values in the function's scope
+        $PSDefaultParameterValues.Clear()
+
+        If (-not ($PSBoundParameters.ContainsKey('Datastore')) ) {
+            $Datastore = Get-Datastore
+        }
+        # Getting all hosts from the cluster(s) if the -Cluster parameter is specified
+        If ($PSBoundParameters.ContainsKey('Cluster')) {
+            $Datastore = Get-Datastore -Location $Cluster
+        }
+        # Preparing a collection to store information for each individual ESXi host
+        $OvercommitInfoCollection = @()
+    }
+
+    Process {
+
+        Foreach ($Store in $Datastore) {
+
+            $UsedSpace = [Math]::Round(((Get-VM -Datastore $Store).UsedSpaceGB | Measure-Object -Sum).Sum, 2)
+            $ProvisionedSpace = [Math]::Round(((Get-VM -Datastore $Store).ProvisionedSpaceGB | Measure-Object -Sum).Sum, 2)
+            Write-Host "`$UsedSpace for $Store is : $UsedSpace"
+            Write-Host "`$ProvisionedSpace for $Store is : $ProvisionedSpace"
+
+            # Building the properties for our custom object
+            $OvercommitInfoProperties = [ordered]@{'Datastore'=$Store.Name                   
+                    'Capacity (GB)'=$Store.CapacityGB
+                    'Used Space (GB)'=if ($UsedSpace) { $UsedSpace } Else { 0 -as [int] }
+                    'Provisioned Space (GB)'=if ($ProvisionedSpace) { $ProvisionedSpace } Else { 0 -as [int] }
+                    'Provisioned / Capacity ratio'=if ($ProvisionedSpace) {[Math]::Round(($ProvisionedSpace / $Store.CapacityGB), 3)} Else { $null }
+                    'Storage Overcommit (%)'=if ($ProvisionedSpace) {[Math]::Round(100*(($ProvisionedSpace - $Store.CapacityGB) / $Store.CapacityGB), 2)} Else { $null }
+                    }           
+
+            # Building a custom object from the list of properties above
+            $OvercommitInfoObj = New-Object -TypeName PSObject -Property $OvercommitInfoProperties
+
+            If ($Quiet) {
+                $OvercommitInfoBoolean = $ProvisionedSpace -gt $Store.CapacityGB
+                $OvercommitInfoCollection += $OvercommitInfoBoolean
+            }
+            Else {  
+                $OvercommitInfoCollection += $OvercommitInfoObj
+            }
+        }
+    }
+    End {
+        If ($PSBoundParameters.ContainsKey('Cluster')) {
+
+            $ClusterCapacity = [Math]::Round(((Get-DatastoreCluster $Cluster).CapacityGB | Measure-Object -Sum).Sum, 2)
+            $ClusterUsedSpace = [Math]::Round(((Get-VM -Datastore $Cluster).UsedSpaceGB | Measure-Object -Sum).Sum, 2)
+            $ClusterProvisionedSpace = [Math]::Round(((Get-VM -Datastore $Cluster).ProvisionedSpaceGB | Measure-Object -Sum).Sum, 2)
+            Write-Host "`$ClusterCapacity for $Cluster is : $ClusterCapacity"
+            Write-Host "`$UsedSpace for $Cluster is : $UsedSpace"
+            Write-Host "`$ProvisionedSpace for $Cluster is : $ProvisionedSpace"
+
+            # Building a custom object specific to the -Cluster parameter
+            $ClusterOvercommitProperties = [ordered]@{'Datastore Cluster'=$Cluster                    
+                    'Capacity (GB)'=$ClusterCapacity
+                    'Used Space (GB)'=if ($ClusterUsedSpace) { $ClusterUsedSpace } Else { 0 -as [int] }
+                    'Provisioned Space (GB)'=if ($ClusterProvisionedSpace) { $ClusterProvisionedSpace } Else { 0 -as [int] }
+                    'Provisioned / Capacity ratio'=if ($ClusterProvisionedSpace) {[Math]::Round(($ClusterProvisionedSpace / $ClusterCapacity), 3)} Else { $null }
+                    'Storage Overcommit (%)'=if ($ClusterProvisionedSpace) {[Math]::Round(100*(( $ClusterProvisionedSpace - $ClusterCapacity) / $ClusterCapacity), 2)} Else { $null }
+                    }     
+
+            $ClusterOvercommitObj = New-Object -TypeName PSObject -Property $ClusterOvercommitProperties
+
+            If ($Quiet) {
+                $ClusterOvercommitBoolean = $ClusterProvisionedSpace -gt $ClusterCapacity
+                $ClusterOvercommitBoolean
+            }
+
+            Else { $ClusterOvercommitObj
+            }
+        }
+        Else { $OvercommitInfoCollection }
+    }
+}
+
+#function Get-VMConfig {
+<#
+.SYNOPSIS
+    Function to retrieve Configuration info of a VM.
+.EXAMPLE
+    PS> Get-VMConfig -VM $VMName OR Get-VM $VMName | Get-VMConfig
+#>  
+function Get-VMConfig {
+[CmdletBinding()]
+param (
+    [parameter(Mandatory=$true,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+    [string[]]$VMS
+)
+
+begin {
+    if ( -not (Get-Module  VMware.VimAutomation.Core)) {
+        Import-Module VMware.VimAutomation.Core
+    }
+    if ($null -eq $global:DefaultVIServers.Name) {
+        Write-Host -ForegroundColor Red "You are not currently connected to any servers. Please connect first using a Connect-VIServer cmdlet."
+        break
+    }
+    $VMConfig_obj = @()
+}
+process {
+    foreach ($VMName in $VMS) {
+        $VMName = Get-VM $VMName
+        $VMDT = $VMName | Get-Datastore
+        $vSwitch = $VMName | Get-VDSwitch
+        $vPortGroup = $VMName | Get-VDPortGroup
+        $VMDisks = $VMName | Get-HardDisk | select Parent, Name, StorageFormat, CapacityGB, Filename
+        $VMView = $VMName | Get-View
+        $VMConfig_obj += [PSCustomObject]@{
+            Name                    = $VMName.Name
+            PowerState              = $VMName.PowerState
+            NumCpu                  = $VMName.NumCpu
+            MemoryGB                = $VMName.MemoryGB
+            MemoryHotAddEnabled     = $VMView.Config.MemoryHotAddEnabled
+            CpuHotAddEnabled        = $VMView.Config.CpuHotAddEnabled
+            CpuHotRemoveEnabled     = $VMView.Config.CpuHotRemoveEnabled
+            MaxCpuUsage             = $VMView.Runtime.MaxCpuUsage
+            MaxMemoryUsage          = $VMView.Runtime.MaxMemoryUsage
+            OverallCpuUsage         = $VMView.Summary.QuickStats.OverallCpuUsage
+            OverallCpuDemand        = $VMView.Summary.QuickStats.OverallCpuDemand
+            GuestMemoryUsage        = $VMView.Summary.QuickStats.GuestMemoryUsage
+            VMMemoryUsage           = $VMView.Summary.QuickStats.HostMemoryUsage
+            Uptime                  = (New-TimeSpan -Seconds $VMView.Summary.QuickStats.UptimeSeconds).ToString("d'.'hh':'mm':'ss")
+            VMHost                  = $VMName.VMHost
+            UsedSpaceGB             = [math]::Round($VMName.UsedSpaceGB, 2)
+            ProvisionedSpaceGB      = [math]::Round($VMName.ProvisionedSpaceGB, 2)
+            CreateDate              = $VMName.CreateDate
+            OSFullName              = $VMName.Guest.OSFullName
+            "VMTools Version"       = $VMView.Config.Tools.ToolsVersion
+            IPAddress               = $VMName.Guest.IPAddress
+            Nics                    = $VMName.Guest.Nics
+            Datastore_Name          = $VMDT.Name
+            VirtualSwitch           = $vSwitch.Name
+            vPortGroup              = $vPortGroup.Name
+            VLanId                  = $vPortGroup.VLanId
+            Disks                    = $VMDisks
+        }#EndPSCustomObject
+    }    
+}
+end {
+    return $VMConfig_obj
+}
+}#End Function Get-VMConfig
+$vmconfig=foreach($VMName in $VMS){Get-VM $VMName|Get-VMConfig}  
+$vmconfig|Export-Csv $path$vc-VMConfig.csv -NoTypeInformation        
+
+# Get-VMHostConfig 
+<#
+.SYNOPSIS
+    Function to retrieve the Configuration info of a vSphere host.
+.EXAMPLE:  Get-VMHostConfig -VMHost $vHost  OR  Get-VMHost $vHost | Get-VMHostConfig
+#> 
+function Get-VMHostConfig { 
+[CmdletBinding()]
+param (
+    [parameter(Mandatory=$true,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+    [string[]]$VMHost
+)
+
+begin {
+    if ( -not (Get-Module  VMware.VimAutomation.Core)) {
+        Import-Module VMware.VimAutomation.Core
+    }
+    if ($null -eq $global:DefaultVIServers.Name) {
+        Write-Host -ForegroundColor Red "You are not currently connected to any servers. Please connect first using a Connect-VIServer cmdlet."
+        break
+    }
+    $VMHostConfig_obj = @()
+}
+process {
+    foreach ($vHost in $VMHost) {
+        $vHost = Get-VMHost $VMHost
+        $HostDTlist = $vHost | Get-Datastore|select name
+        $VMHostView = $vHost | Get-View
+        $VMHostConfig_obj += [PSCustomObject]@{
+            Name                    = $vHost.Name
+            ConnectionState         = $vHost.ConnectionState
+            PowerState              = $vHost.PowerState
+            OverallStatus           = $VMHostView.Summary.OverallStatus
+            Manufacturer            = $vHost.Manufacturer
+            Model                   = $vHost.Model
+            NumCpuSockets           = $VMHostView.Summary.Hardware.NumCpuPkgs
+            NumCpuCores             = $vHost.NumCpu
+            NumCpuThreads           = $VMHostView.Summary.Hardware.NumCpuThreads
+            NumNics                 = $VMHostView.Summary.Hardware.NumNics
+            NumHBAs                 = $VMHostView.Summary.Hardware.NumHBAs
+            CpuTotalMhz             = $vHost.CpuTotalMhz
+            CpuUsageMhz             = $vHost.CpuUsageMhz
+            MemoryTotalGB           = [math]::Round($vHost.MemoryTotalGB, 2)
+            MemoryUsageGB           = [math]::Round($vHost.MemoryUsageGB, 2)
+            ProcessorType           = $vHost.ProcessorType
+            HyperthreadingActive    = $vHost.HyperthreadingActive
+            MaxEVCMode              = $vHost.MaxEVCMode
+            Uptime                  = (New-TimeSpan -Seconds $VMHostView.Summary.QuickStats.Uptime).ToString("d'.'hh':'mm':'ss")            
+            ManagementServerIp      = $VMHostView.Summary.ManagementServerIp
+            VMSwapfileDatastore     = $vHost.VMSwapfileDatastore
+            Datastores              = $HostDTlist
+        }#EndPSCustomObject
+    }
+}
+end {
+    return $VMHostConfig_obj
+}
+}#End Function Get-VMHostConfig
+$vmhostConfig=foreach($vHost in $VMHost){Get-VMHost $vHost|Get-VMHostConfig}    
+$vmhostconfig|Export-Csv $path$vc-VMHostConfig.csv -NoTypeInformation
+
+function Get-VMHostNetworkConfig {
+<#
+    .SYNOPSIS
+    Function to retrieve the Network Configuration info of a vSphere host.
+ .EXAMPLE : Get-VMHostNetworkConfig -VMHost vHost OR Get-VMHost ESXi01,ESXi02 | Get-VMHostNetworkConfig
+ 
+#>  
+
+function Get-VMHostNetworkConfig {
+[CmdletBinding()]
+param (
+    [parameter(Mandatory=$true,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+    [string[]]$VMHost
+)
+
+begin {
+    if ( -not (Get-Module  VMware.VimAutomation.Core)) {
+        Import-Module VMware.VimAutomation.Core
+    }
+    if ($null -eq $global:DefaultVIServers.Name) {
+        Write-Host -ForegroundColor Red "You are not currently connected to any servers. Please connect first using a Connect-VIServer cmdlet."
+        break
+    }
+    $VMHostNetworkConfig_obj = @()
+}
+process {    
+    foreach ($vHost in $VMHost) {
+        $vHost = Get-VMHost $VMHost
+        $vSwitches = $vHost | Get-VirtualSwitch -Standard
+        $vDSwitches = $vHost | Get-VirtualSwitch -Distributed
+        #Standard Switches
+        foreach ($vSwitch in $vSwitches) {
+            $vPortGroups = $vSwitch | Get-VirtualPortGroup
+            foreach ($vPortGroup in $vPortGroups){
+                $VMHostNetworkConfig_obj += [PSCustomObject]@{
+                    VMHost          = $vHost
+                    VirtualSwitch   = $vSwitch.Name
+                    vPortGroup      = $vPortGroup.Name
+                    Nic             = [string]$vSwitch.Nic
+                    VLanId          = $vPortGroup.VLanId
+                }#EndPSCustomObject
+            }
+        }
+        #Distributed Switches
+        foreach ($vDSwitch in $vDSwitches) {
+            $vDSwitch = Get-VDSwitch $vDSwitch
+            $vDPortGroups = $vDSwitch | Get-VDPortgroup
+            foreach ($vDPortGroup in $vDPortGroups){
+                $vDPorts = $vDPortGroup | Get-VDPort
+                $VMHostNetworkConfig_obj += [PSCustomObject]@{
+                    VMHost          = $vHost
+                    VirtualSwitch   = $vDSwitch.Name
+                    vPortGroup      = $vDPortGroup.Name
+                    VLanId          = $vDPortGroup.VlanConfiguration
+                }#EndPSCustomObject
+            }
+        }
+    }
+}
+end {
+    return $VMHostNetworkConfig_obj
+}
+} #End Function Get-VMHostNetworkConfig
+$vmhostnetworkconfig=foreach($vHost in $VMHost){Get-VMHost $vHost |Get-VMHostNetworkConfig}  
+$vmhostnetworkconfig|Export-Csv $path$vc-VMHostNetworkConfig.csv -NoTypeInformation
+
+<#
+# Hosts Certificates  same data found at #https://fsc1/tools/db/?table=pki_certificates
+Function Get-Certs {
+
+[CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true, Position = 0)]
+        [string]$URL,
+        [Parameter(Position = 1)]
+        [ValidateRange(1,65535)]
+        [int]$Port = 443,
+        [Parameter(Position = 2)]
+        [Net.WebProxy]$Proxy,
+        [Parameter(Position = 3)]
+        [int]$Timeout = 15000,
+        [switch]$UseUserContext
+    )
+Add-Type @"
+using System;
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+namespace PKI {
+    namespace Web {
+        public class WebSSL {
+            public Uri OriginalURi;
+            public Uri ReturnedURi;
+            public X509Certificate2 Certificate;
+            public X500DistinguishedName Issuer;
+            public X500DistinguishedName Subject;
+            public string Issuer;
+            public string Subject;
+            public string[] SubjectAlternativeNames;
+            public bool CertificateIsValid;
+            public X509ChainStatus[] ErrorInformation;
+            public string[] ErrorInformation;
+            public HttpWebResponse Response;
+        }
+    }
+}
+"@
+    $ConnectString = "https://"+$url+":"+$port
+    $WebRequest = [Net.WebRequest]::Create($ConnectString)
+    $WebRequest.Proxy = $Proxy
+    $WebRequest.Credentials = $null
+    $WebRequest.Timeout = $Timeout
+    $WebRequest.AllowAutoRedirect = $true
+    [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+    try {$Response = $WebRequest.GetResponse()}
+    catch {}
+    if ($WebRequest.ServicePoint.Certificate -ne $null) {
+        $Cert = [Security.Cryptography.X509Certificates.X509Certificate2]$WebRequest.ServicePoint.Certificate.Handle
+        try {$SAN = ($Cert.Extensions | Where-Object {$_.Oid.Value -eq "2.5.29.17"}).Format(0) -split ", "}
+        catch {$SAN = $null}
+        $chain = New-Object Security.Cryptography.X509Certificates.X509Chain -ArgumentList (!$UseUserContext)
+        [void]$chain.ChainPolicy.ApplicationPolicy.Add("1.3.6.1.5.5.7.3.1")
+        $Status = $chain.Build($Cert)
+        New-Object PKI.Web.WebSSL -Property @{
+            OriginalUri = $ConnectString;
+            ReturnedUri = $Response.ResponseUri;
+            Certificate = $WebRequest.ServicePoint.Certificate;
+            Issuer = $WebRequest.ServicePoint.Certificate.Issuer;
+            Subject = $WebRequest.ServicePoint.Certificate.Subject;
+            SubjectAlternativeNames = $SAN;
+            CertificateIsValid = $Status;
+            Response = $Response;
+            ErrorInformation = $chain.ChainStatus | ForEach-Object {$_.Status}
+        }
+        $chain.Reset()
+        [Net.ServicePointManager]::ServerCertificateValidationCallback = $null
+    } else {
+        Write-Error $Error[0]
+    }
+}
+$vc=get-datacenter
+
+# Check for Host Certificates
+Get-VMHost | Foreach { Get-Certs -URL $_.Name | Select OriginalURi, CertificateIsValid, Issuer, @{N="Expires";E={$_.Certificate.NotAfter} }, @{N="DaysTillExpire";E={(New-TimeSpan -Start (Get-Date) -End ($_.Certificate.NotAfter)).Days} }}
+
+$vmhs=get-vmhost
+$VMHostsCerts=foreach($vmh in $vmhs){Get-VMHost $vmh| Foreach { Get-Certs -URL $vmh.Name | Select OriginalURi, CertificateIsValid, Issuer, @{N="Expires";E={$_.Certificate.NotAfter} }, @{N="DaysTillExpire";E={(New-TimeSpan -Start (Get-Date) -End ($_.Certificate.NotAfter)).Days} }}
+
+
+# Check for vCenter Certificate
+Get-Certs -URL $vc | Select OriginalURi, CertificateIsValid, Issuer, @{N="Expires";E={$_.Certificate.NotAfter} }, @{N="DaysTillExpire";E={(New-TimeSpan -Start (Get-Date) -End ($_.Certificate.NotAfter)).Days} }
+
+#>
