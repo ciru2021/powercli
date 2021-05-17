@@ -1,0 +1,34 @@
+I am assuming a standard CSV file, and what you posted above was copied out of Excel and not the text of the CSV.  So I am working from input that looks like ...
+
+Server,IP,State
+Box1,192.168.25.1,Enabled
+Box2,192.168.25.2,Disabled
+Box3,192.168.25.3,Disabled
+
+So this seems to work with a standard set of CSV files.
+
+# powershell.com/.../19384.aspx
+$reference = Import-Csv -Path C:\ephemeral\old.csv
+$lookup = $reference | Group-Object -AsHashTable -AsString -Property Server
+
+$results = Import-Csv -Path C:\ephemeral\new.csv | foreach {
+    $server = $_.Server
+    Write-Verbose "Looking for $server"
+    if ($lookup.ContainsKey($server))
+    {
+        $oldState = ($lookup[$server]).State
+    }
+    else
+    {
+        $oldState = "Unknown"
+    }
+    if ($_.State -ne $oldState)
+    {
+        [PSCustomObject]@{
+            Server = $server
+            IP = $_.IP
+            OldState = $oldState
+            NewState = $_.State
+        }
+    }
+}
