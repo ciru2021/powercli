@@ -1,0 +1,117 @@
+PowerCLI Script to capture Cluster Utilization with Performance Averages (v2)
+Jump to solution
+Hi,
+
+Id like to take the script used for quickly analyzing and exporting cluster utilization data to include historical average as well using Get-Stat as recommended by LucD.  I've modified the final script version from the previous thread located https://communities.vmware.com/thread/596563 to the following:
+
+$hosts = "192.168.0.1"
+
+$a = "<style>"
+
+$a = $a + "BODY{background-color:white;}"
+
+$a = $a + "TABLE{border-width: 1px;border-style: solid;border-color: black;border-collapse: collapse;}"
+
+$a = $a + "TH{border-width: 1px;padding: 1px;border-style: solid;border-color: black;background-color:PaleGoldenrod}"
+
+$a = $a + "TD{border-width: 1px;padding: 1px;border-style: solid;border-color: black;background-color:white}"
+
+$a = $a + "</style>"
+
+if($global:defaultviservers){
+
+    Disconnect-VIServer -Server $global:defaultviservers -Force -Confirm:$false
+
+}
+
+$output = foreach($vc in $hosts){
+
+    Write-Host "Getting Cluster Information from $vc"
+
+    Connect-VIServer -Server $vc | Out-Null
+
+    Get-Cluster -Server $vc | where{$_.ExtensionData.Host.Count -ne 0} | ForEach-Object -Process {
+
+        Write-Host "Looking at cluster $($_.Name)"
+
+        #$ds = Get-Datastore -RelatedObject $_ | where{$_.ExtensionData.Summary.MultipleHostAccess}
+
+        $esx = Get-VMHost -Location $_
+
+        $vm = Get-VM -Location $_ | where{$_.PowerState -eq "PoweredOn"}
+
+        $cpuTot = ($esx | Measure-Object -Property CpuTotalMhz -Sum).Sum
+
+        $cpuUse = ($esx | Measure-Object -Property CpuUsageMhz -Sum).Sum
+
+        $memTot = ($esx | Measure-Object -Property MemoryTotalGB -Sum).Sum
+
+        $memUse = ($esx | Measure-Object -Property MemoryUsageGB -Sum).Sum
+
+        $obj = [ordered]@{
+
+            #vCenter = $global:defaultviserver.Name
+
+            Cluster = $_.Name
+
+            'Total CPU Ghz' = [math]::Round($cpuTot/1000,0)
+
+            'CPU Usage' = "{0:P0}" -f ($cpuUse/$cpuTot)
+
+            'CPU Free' = "{0:P0}" -f (($cpuTot - $cpuUse)/$cpuTot)
+
+            'Total RAM GB' = [math]::Round($memTot,0)
+
+            'RAM Usage' = "{0:P0}" -f ($memUse/$memTot)
+
+            'RAM Free GB' = "{0:P0}" -f (($memTot - $memUse)/$memTot)
+
+            #'Total Capacity GB' = [math]::Round(($ds.CapacityGB | Measure-Object -Sum).Sum,0)
+
+            #'Used Capacity GB' = [math]::Round(($ds | %{$_.CapacityGB - $_.FreeSpaceGB} | Measure-Object -Sum).Sum,0)
+
+            #'Free Capacity GB' = [math]::Round(($ds.FreeSpaceGB | Measure-Object -Sum).Sum,0)
+
+            'N° Hosts' = $_.ExtensionData.Host.Count
+
+            'N°VMs' = &{
+
+                $esxVM = Get-View -Id $_.ExtensionData.Host -Property VM
+
+                $vm = @()
+
+                if($esxVM.VM){
+
+                    $vm = Get-View -Id $esxVM.VM -Property Summary.Config.Template |
+
+                    where{-not $_.Summary.Config.Template}
+
+                }
+
+                $vm.Count
+
+                }
+
+            'vCPU' = ($vm.NumCpu | Measure-Object -Sum).Sum
+
+            'pCPU' = ($esx.NumCpu | Measure-Object -Sum).Sum
+
+            'vCPU/pCPU' = "{0:P0}" -f (($vm.NumCpu | Measure-Object -Sum).Sum / ($esx.NumCpu | Measure-Object -Sum).Sum)
+
+            'vMem' = [math]::Round(($vm.MemoryGB | Measure-Object -Sum).Sum)
+
+            'pMem' = [math]::Round(($esx.MemoryTotalGB | Measure-Object -Sum).Sum)
+
+            'vMem/pMem' = "{0:P0}" -f (($vm.MemoryGB | Measure-Object -Sum).Sum / ($esx.MemoryTotalGB | Measure-Object -Sum).Sum)
+
+        }
+
+        New-Object PSObject -Property $obj
+
+   }
+
+   Disconnect-VIServer $vc -confirm:$false
+
+}
+
+$output | ConvertTo-Html -Head $a | Out-File C:\ClusterReport.htm -width 400
