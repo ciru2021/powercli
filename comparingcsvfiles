@@ -1,0 +1,30 @@
+cls
+$OrdersA = Import-CSV -Path .\OrdersA.csv
+$OrdersB = Import-CSV -Path .\OrdersB.csvRemove-Item -path .\report\*.csv
+$matchcounter = 0
+$start = [system.datetime]::Now
+foreach ($order1 in $OrdersA){
+    $matched = $false
+    foreach ($order2 in $OrdersB){
+        $obj = "" | select "Item Number","Location","Responsible Manager","Status","Sub Status","Open Date","Date Notified","Target Date","Due in Week","Severity"
+        if(($order1.'Item Number' -replace "A" ) -eq $order2.'Number' ){
+            $matchCounter++
+            $matched = $true
+            $obj.'Item Number' = $order1.'Item Number'
+            $obj.'Location' = $order1.'Location'
+            $obj.'Responsible Manager' = $order1.'Responsible Manager'
+            $obj.Status = $order1.Status
+            $obj."Sub Status" = $order1."Sub Status"
+            $DueInWeek = $order2.'Due in Week'
+            $obj.'Open Date' = $order1.'Open Date'
+            $TargetDate = ($order1.'Target Date' -split " ")[0]
+            $obj.'Target Date' = $TargetDate
+
+            Write-Host "Match Found Orders " "$matchCounter"
+            $obj | Export-Csv -Path .\report\Report_Orders.csv -Append -NoTypeInformation
+        }
+    }
+}
+$end = [system.datetime]::Now
+$resultTime = $end - $start
+Write-Host "Execution took : $($resultTime.TotalSeconds) seconds."
