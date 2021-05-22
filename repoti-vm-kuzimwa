@@ -1,0 +1,39 @@
+$VMs = get-vm |Where-object {$_.powerstate -eq “poweredoff”}
+
+$Datastores = Get-Datastore | select Name, Id
+
+Get-VIEvent -Start (Get-Date).AddDays(-180) | where{$_.FullFormattedMessage -like “*is powered off”} |
+
+Group-Object -Property {$_.Vm.Name} | %{
+
+$lastPO = $_.Group | Sort-Object -Property CreatedTime -Descending | Select -First 1
+
+$vm = Get-VIObjectByVIView -MORef $_.Group[0].VM.VM
+
+$row = ” | select VMName,Powerstate,OS,Host,Cluster,Datastore,NumCPU,MemMb,DiskGb,PowerOFF
+
+$row.VMName = $vm.Name
+
+$row.Powerstate = $vm.Powerstate
+
+$row.OS = $vm.Guest.OSFullName
+
+$row.Host = $vm.VMHost.name
+
+$row.Cluster = $vm.VMHost.Parent.Name
+
+$row.Datastore = $Datastores | Where{$_.Id -eq ($vm.DatastoreIdList | select -First 1)} | Select -ExpandProperty Name
+
+$row.NumCPU = $vm.NumCPU
+
+$row.MemMb = $vm.MemoryMB
+
+$row.DiskGb = Get-HardDisk -VM $vm | Measure-Object -Property CapacityGB -Sum | select -ExpandProperty Sum
+
+$row.PowerOFF = $lastPO.CreatedTime
+
+$report += $row
+
+}
+
+My script gave me a zero byte file // failed.
