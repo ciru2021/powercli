@@ -1,0 +1,43 @@
+<#
+Line 1: Get a list with the names of all the guests that are currently powered off.
+
+Line 2: Get the events from the last 7 days that were created for a “power off” task.
+
+Line 3: Extract the names of all the guests for which we found a “power off” event.
+
+Line 4: Remove from our list of currently powered off guests all those for which we found a “power off” event in the last week.
+
+Ok, this works. On the console we see all the guests that have been powered off for more than a week.
+
+But still, this script took in a modest vSphere environment 32 minutes to complete.
+
+Isn’t there a faster way ?
+
+There is indeed an important improvement we can make to the script. The Get-VIEvent cmdlet has an -Entity parameter where you tell the cmdlet to only collect events that were fired for one or more specific entities.
+
+If we add the -Entity parameter, the script becomes something like this.
+
+#>
+$events = Get-VIEvent -Finish (Get-Date).AddDays(-90) -Entity $vms | where{$_.FullFormattedMessage -like "*is powered off"}
+
+This line is showing the events that are 90 days old that has a "powered off" message.  What is excluding the systems from being powered on/off again after this in your report?
+
+Or am I reading this wrong and it is including events that are between 90 and 0 days old?
+
+Line 1: Get a list with the names of all the guests that are currently powered off.
+
+Line 2: Get the events from the last 7 days that were created for a “power off” task.
+
+Line 3: Extract the names of all the guests for which we found a “power off” event.
+
+Line 4: Remove from our list of currently powered off guests all those for which we found a “power off” event in the last week.
+
+Ok, this works. On the console we see all the guests that have been powered off for more than a week.
+
+But still, this script took in a modest vSphere environment 32 minutes to complete.
+
+Isn’t there a faster way ?
+
+There is indeed an important improvement we can make to the script. The Get-VIEvent cmdlet has an -Entity parameter where you tell the cmdlet to only collect events that were fired for one or more specific entities.
+
+If we add the -Entity parameter, the script becomes something like this.
