@@ -1,0 +1,198 @@
+$Report = @()
+
+$VMs = get-vm |Where-object {$_.powerstate -eq "poweredoff"}
+
+$Datastores = Get-Datastore | select Name, Id
+
+$VMHosts = Get-VMHost | select Name, Parent
+
+foreach ($vm in Get-VM){
+
+$view = Get-View $VMs
+
+Get-VIEvent -Entity $VMs -MaxSamples ([int]::MaxValue) |
+
+where {$_ -is [VMware.Vim.VmPoweredOffEvent]}
+
+Group-Object -Property {$_.Vm.Name} | %{
+
+  $lastPO = $_.Group | Sort-Object -Property CreatedTime -Descending | Select -First 1
+
+  $row = '' | select VMName,Powerstate,OS,Host,Cluster,Datastore,NumCPU,MemMb,DiskGb,PowerOFF
+
+    $row.VMName = $VMs.Name
+
+    $row.Powerstate = $VMs.Powerstate
+
+    $row.OS = $VMs.Guest.OSFullName
+
+    $row.Host = $VMs.host.name
+
+    $row.Cluster = $VMs.host.Parent.Name
+
+    $row.Datastore = ($Datastores | where {$_.ID -match (($vmview.Datastore | Select -First 1) | Select Value).Value} | Select Name).Name
+
+    $row.NumCPU = $VMs.NumCPU
+
+    $row.MemMb = (($VMs.MemoryMB),2)
+
+    $row.DiskGb = ((($VMs.HardDisks | Measure-Object -Property CapacityKB -Sum).Sum * 1KB / 1GB),2)
+
+    $row.PowerOFF = $lastPO.CreatedTime
+
+  $report += $row
+
+}}
+
+$report | Sort Name | Export-Csv -Path "C:\XXXXX\Powered_Off_VMs.csv"
+
+disconnect-viserver * -confirm:$false
+
+I don't get an export to CSV and a display on screen of the following:
+
+Template             : False
+
+Key                  : 165369
+
+ChainId              : 165369
+
+CreatedTime          : 6/28/2016 10:19:35 AM
+
+UserName             :
+
+Datacenter           : VMware.Vim.DatacenterEventArgument
+
+ComputeResource      : VMware.Vim.ComputeResourceEventArgument
+
+Host                 : VMware.Vim.HostEventArgument
+
+Vm                   : VMware.Vim.VmEventArgument
+
+Ds                   :
+
+Net                  :
+
+Dvs                  :
+
+FullFormattedMessage : ServerName on  XXX-prodesxi-10.xxxxx.com in ClusterName is powered off
+
+ChangeTag            :
+
+
+********************************
+How to check power off VM date ?
+Can anybody help me , I am trying see the VM poweroff/shutdown date but i can see only 30 days report through the below script . I have a around 196 VMs which is powered off and i want to see the power off date . Below script is working but only showing the last 30 days report. Is anybody in this group who can help me , how i can check these VMs.
+
+Connect-VIServer -Server XXX-vcenter1 -User administrator@vsphere.local -Password XXXXXXXXXXXX
+
+$Report = @()
+
+$VMs = get-vm |Where-object {$_.powerstate -eq "poweredoff"}
+
+$Datastores = Get-Datastore | select Name, Id
+
+Get-VIEvent -Entity $VMs -MaxSamples ([int]::MaxValue) |
+
+where {$_ -is [VMware.Vim.VmPoweredOffEvent]} |
+
+Group-Object -Property {$_.Vm.Name} | %{
+
+$lastPO = $_.Group | Sort-Object -Property CreatedTime -Descending | Select -First 1
+
+$vm = Get-VM -Name $_.Name
+
+$row = '' | select VMName,Powerstate,OS,Host,Cluster,Datastore,NumCPU,MemMb,DiskGb,PowerOFF
+
+$row.VMName = $vm.Name
+
+$row.Powerstate = $vm.Powerstate
+
+  $row.OS = $vm.Guest.OSFullName
+
+$row.Host = $vm.VMHost.name
+
+$row.Cluster = $vm.VMHost.Parent.Name
+
+$row.Datastore = ($Datastores | where {$_.ID -match (($vm.Datastore | Select -First 1) | Select Value).Value} | Select Name).Name
+
+    $row.NumCPU = $vm.NumCPU
+
+$row.MemMb = $vm.MemoryMB
+
+$row.DiskGb = ((($vm.HardDisks | Measure-Object -Property CapacityKB -Sum).Sum * 1KB / 1GB),2)
+
+$row.PowerOFF = $lastPO.CreatedTime
+
+  $report += $row
+
+}
+
+$report | Sort Name | Export-Csv -Path "C:\XXXXX\Powered_Off_VMs.csv" -NoTypeInformation -UseCulture
+
+disconnect-viserver * -confirm:$false
+
+
+************************************************************
+PowerCLI Script – Report Powered off VM’s older than 30 days
+#*************************************************************************************************************
+#      Script Name	:   VMPoweredOff30DaysAgo.ps1
+#      Purpose		:   Get the report of VMS Powered Off 30 Days ago				
+#      Date		:   28-11-2016	# - Initial version
+#                   	:  
+#      Author		:   www.vmwarearena.com
+#
+#*************************************************************************************************************
+#
+If(!(Get-PSSnapin | Where {$_.Name -Eq "VMware.VimAutomation.Core"}))
+{
+	Add-PSSnapin VMware.VimAutomation.Core
+}
+$VCServer = Read-Host 'Enter VC Server name'
+$vcUSERNAME = Read-Host 'Enter user name'
+$vcPassword = Read-Host 'Enter password' -AsSecureString
+$vccredential = New-Object System.Management.Automation.PSCredential ($vcusername, $vcPassword)
+
+
+$LogFile = "VMPoweredOff_" + (Get-Date -UFormat "%d-%b-%Y-%H-%M") + ".csv" 
+
+Write-Host "Connecting to $VCServer..." -Foregroundcolor "Yellow" -NoNewLine
+$connection = Connect-VIServer -Server $VCServer -Cred $vccredential -ErrorAction SilentlyContinue -WarningAction 0 | Out-Null
+$Global:Report = @()
+
+
+If($? -Eq $True)
+
+{
+	Write-Host "Connected" -Foregroundcolor "Green" 
+
+	$PoweredOffAge = (Get-Date).AddDays(-30)
+	$Output = @{}
+	$PoweredOffvms = Get-VM | where {$_.PowerState -eq "PoweredOff"}
+	$EventsLog = Get-VIEvent -Entity $PoweredOffvms -Finish $PoweredOffAge  -MaxSamples ([int]::MaxValue) | where{$_.FullFormattedMessage -like "*is powered off"}
+	If($EventsLog)
+	{
+		$EventsLog | %{ if($Output[$_.Vm.Name] -lt $_.CreatedTime)
+			{
+				$Output[$_.Vm.Name] = $_.CreatedTime
+			}
+		}
+	}
+	$Result = $Output.getEnumerator() | select @{N="VM";E={$_.Key}},@{N="Powered Off Date";E={$_.Value}}
+
+	If($Result)
+	{
+		$Result | Export-Csv -NoTypeInformation $LogFile
+	}
+	Else
+	{
+		"NO VM's Powered off last 30 Days"
+	}
+}
+Else
+{
+	Write-Host "Error in Connecting to $VIServer; Try Again with correct user name & password!" -Foregroundcolor "Red" 
+}
+
+Disconnect-VIServer * -Confirm:$false
+#
+#-------------------------------------------------------------------------------------------------------------
