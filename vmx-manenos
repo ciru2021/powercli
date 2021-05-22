@@ -1,0 +1,33 @@
+add-pssnapin VMware.VimAutomation.Core
+
+# ---------- Only modify the fields in this area -------------
+$vCenter = 'qlab-copsmgr'                  #name of the vCenter 
+$dataCenter = 'Fly-away Kit'               #name of the DataCenter 
+$outputFile = $vCenter + '-LastDateUsed.csv'             #desired output file name
+
+# ---------- No modification is needed in the below code. Do not edit   -------------
+$columnName = "Name,DataStore,Date Last Used" | Out-File .\$OutputFile -Encoding ascii
+Connect-VIServer $vCenter -WarningAction SilentlyContinue
+$vmList = Get-VM | where { $_.PowerState -eq “PoweredOff”} | select Name
+$vmList = $vmList -replace 'Name : ', '' -replace '@{Name=', '' -replace '}', ''
+
+ForEach ($VM in $vmList)
+{
+    # Get configuration and path to vmx file
+    $VMconfig = Get-VM $VM | Get-View | select config
+    $VMXpath = $VMconfig.config.files.VMpathName
+
+    # Remove and/or replace unwanted strings
+    $VMXpath = $VMXpath -replace '\[','' -replace '\] ','\' -replace '@{Filename=','/' -replace '}','' -replace '/','\'
+
+    # List the vmx file in the datastore
+    $VMXinfo = ls vmstores:\$VCenter@443\$DataCenter\$VMXpath | Where {$_.LastWriteTime} | select -first 1 | select FolderPath, LastWriteTime
+
+    # Remove and/or replace unwanted strings
+    $VMXinfo = $VMXinfo -replace 'DatastoreFullPath=', '' -replace '@{', '' -replace '}', '' -replace ';', ',' -replace 'LastWriteTime=', ''
+
+    # Output vmx information to .csv file
+    $output = $VM + ', ' + $VMXinfo
+    $output
+    echo $output >> $OutputFile
+}
