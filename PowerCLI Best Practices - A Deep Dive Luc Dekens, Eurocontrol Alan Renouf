@@ -1,0 +1,264 @@
+VMworld 2013: PowerCLI Best Practices - A Deep Dive
+PowerCLI Best Practices - A Deep Dive Luc Dekens, Eurocontrol Alan Renouf, VMware VSVC4944 #VSVC4944
+Who Are We? 
+ Alan Renouf – Sr. Technical Marketing Architect, VMware 
+• Automation: PowerCLI 
+• vExpert 
+• VMware Blog: http://blogs.vmware.com/vipowershell/ 
+• Personal Blog: http://virtu-al.net/ 
+• Twitter: @alanrenouf  Luc Dekens – Systems Engineer, Eurocontrol Maastricht 
+• Personal Blog: http://lucd.info/ 
+• vExpert & PowerShell MVP 
+• VMTN account: LucD 
+• Twitter: @Lucd22
+
+Introduction I hope the coffee has kicked in…
+Background 
+ We’re back for the 3rd time in a row 
+• You just cant get enough of PowerCLI! 
+
+ No 1 unique solution for a task/problem. 
+ Some are better 
+• More performant 
+• More flexible 
+
+ This session shows a number of these, so you don’t have to find them out yourselves
+Common PowerCLI Questions The PowerCLI Community is huge! This session will make your life easier (and also full of famous people)
+Common PowerCLI Questions The PowerCLI Community is huge! This session will make you an expert
+Community Question I sense a new force in the galaxy, what is this PowerCLI ?
+
+PowerCLI Overview 
+ Why PowerCLI? 
+• PowerShell is universal, easy to use and works with objects  Why universal? 
+• The standard on Windows platforms 
+• Reuse your PowerShell knowledge in different applications 
+
+ Easy to use? 
+• The verb-noun construct in plain English 
+• Help is available 
+• Start with minimal set of cmdlets, and grow
+
+ What’s with these objects? 
+• Think of it as unit that has data and functions 
+• Objects flow through the pipeline to the next cmdlet
+
+PowerCLI Overview – Simple Examples 
+ Simple to read/write New-VM –Name VM1 –VMHost MyEsx 
+ Easy to extend for big(ger) environments 1..10 | Foreach {New-VM –Name VM$_ –VMHost MyEsx} 
+ Clear, understandable minimal code Get-Datastore | Select Name,Type,FileSystemVersion 
+ Access to API covers what is not (yet) there Get-VMHost | Select Name, @{N=“Reboot”;E={$_.ExtensionData.Summary.RebootRequired}}
+Community Question I already know most things… So what's new in PowerCLI 5.5 R1?
+
+PowerCLI Snap-in’s 
+ Core • Managing vSphere 
+ Image Builder • Working with Image Profiles 
+ Auto Deploy • Deploying ESXi via PXE 
+ License • Working with vSphere Licensing 
+ VDS • Working with vSphere Distributed Switch 
+ Cloud • vCloud Director Providers 
+ Tenant • vCloud Director Tenants Core Image Builder Auto Deploy License Cloud Tenant VDS
+
+PowerCLI 5.5 R1 - Overview New Cmdlets to manage vSphere Tags  Manage Tags in the vSphere environment  Assign Tags to vSphere Objects  Remove Tag assignments from vSphere Objects VDS  Easy VDS Migration  Manage Private VLANs  Manage VDS Policies  Manage VDS Ports VM Console  Open a console for vSphere/vCloud VM  Open multiple consoles at once  Output the URL to open VM Consoles vCloud Director 5.5 Support  Support for vCD 5.5 Host Licensing  Assign Host Licensing
+
+Community Question Quit your jibber jabber, how can I apply some PowerShell best practices to PowerCLI, fool!
+
+Best Practices 
+ Store results in variables 
+• Speed 
+• Re-use 
+• Filter on the variables  Use Get-Help and the Examples –ShowWindow 
+
+ Break things down into functions – Don’t forget splatting 
+ Try/Catch/Throw 
+ Filter on the left 
+• Get-Event | Sort Date | Where { $_.Something –eq “5” } 
+• Get-Event | Where { $_.Something –eq “5” } | Sort Date  Steal from the best (Lucd.info) and write the rest  Do not use Write-Host as output, only for output to console • Use Write-Verbose or Write-Warning
+
+Community Question How do I run these scripts?
+What Is the Best Way to Run My Script? 
+ PS1 file / dot source / functions - what does this mean? 
+ Console (PowerCLI Prompt) / Editor 
+ Scheduled Task in Windows (add-pssnapin VMware.vimautomation*) 
+ vCenter Alert action 
+• VM Creation – Secure a VM 
+• Host added to vCenter 
+
+ Robust PS Sessions (See demo later) 
+ WebCommander (Future VMware Fling)
+
+Launching the Code DEMO
+
+Community Question Why is PowerCLI so slow?
+Why is PowerCLI slow to launch? 
+• Load environment 
+• PowerShell v1, v2, v3 – Caching 
+
+How can I make it even faster? 
+• Remote session 
+• Run the Connect-VIServer 
+• Run a cmdlet 
+• Disconnect/Reconnect from the session (see demo later) 
+
+Why is PowerCLI slower than a direct API call or other SDK? 
+• Abstracted Object 
+• Easier to read code 
+• Easier to work with / Pipeline Results 
+• Formulated objects
+
+Why is PowerCLI so Slow? 
+ Making results faster 
+ Finding the properties you need 
+• ExtensionData 
+• New-VIProperty 
+• Use the Property parameter with Get-View 
+
+ Creating a new object 
+• What to read in the SDK • How to create it 
+• Creating the bare frame and filling in what's needed 
+
+ Onyx 
+• How it is helpful 
+• How it is not helpful
+
+Community Question How do I export my information?
+Advanced Reporting -CSV/TXT/XML 
+• Use whatever is relevant and saves time 
+• Think about how you can use the information later 
+
+Export-XLS / Word 
+• Export-XLS is a function available on LucD.Info which exports straight to Excel 
+• Including multiple sheets and Graphs  vCheck 
+• Community driven script to give you the information you need 
+• Plugins to add your own checks or remove others for speed 
+• Change the Style easily 
+• FREE 
+• Get Involved!
+
+Performance: Advanced, and Fun, Reporting  The performance data is there, use it!  How to find the available counters?  VMware Tools gives access to guest OS metrics  Data where you don’t expect it, like for example through CIM  And a picture still says more than 1K words • Replace your CSV files with nice graphs • Several options available (XLS, MS Chart…) • Combining metrics in a graph will bring a point across  Mapping of vDisks to OS Partitions (The holy grail)
+Advanced Reporting DEMO
+
+Community Question How do the newer versions of PowerShell make a difference?
+Use the PowerShell v3 Features  Use the new CIM cmdlets • A wealth of information • Find out what is there (CIM classes)  Robust sessions • See the SIW demo later on  Calling SOAP/REST methods became a lot easier  Ordered objects
+
+CIM Demo DEMO
+CIM/SMASH 
+ See VMware CIM SMASH/Server Management API for ESXi Documentation 
+ Result in PNG/PDF/…
+
+Server In Waiting 
+ PowerCLI is great ! 
+ …but do some of these sound familiar ? 
+• Slow Connect-VIServer 
+• Slow first cmdlet 
+• Aligning PowerCLI snapin versions 
+• Exceptions in big environments 
+
+ We did, and we were fed up with those 
+ PS Remoting I 
+ Use PS Remoting with robust sessions ! 
+ A “work horse” box 
+ Lots of CPU power & memory (if needed) 
+ Start a remote session 
+• Load PowerCLI 
+• Connect-VIServer 
+• Execute any PowerCLI cmdlet (JIT) 
+• Disconnect the remote PSSession
+PS Remoting II 
+ Discover with Get-PSSession 
+ Use Connect-PSSession ! 
+• Connects to robust session 
+• PowerCLI environment is ready 
+  Some drawbacks 
+• Reconnect 
+ same account 
+• Sessions tend to get bloated (leaks) 
+• Some GUIs have a problem (PSP, PowerGUI)
+
+PS Remoting III - Schematic SIW Session 3 Session 2 Session 1 Server 2012 Core 1 New-PSSession Disconnect-PSSession Invoke-Command # PowerCLI environment 2 Get-PSSession Connect-PSSession Enter-PSSession Invoke-Command
+PS Remoting IV - Gotchas 
+ Set up PowerCLI in the PSSession 
+ Pre W2K12 – mind the available memory
+SIW Demo DEMO
+Comparison – Classic vs SIW Classic SIW Connect-VIServer 14.6 0 Get- Datacenter(1st) 5.3 0.1 Get-Datacenter 0.1 0.1
+Community Question I'm all about Events, but how can I use them?
+Events - What 
+ Used to record significant state changes of managed entities 
+ Stored in the vCenter DB  Retention!
+
+Events – Objects - Inheritance Event VmEvent VmDeployed Event Template srcTemplateCreatedTime … vm EventEx ExtendedEvent Arguments eventTypeId … General Event message data eventTypeId …
+Events – Simple Retrieval 
+ Get-VIEvent 
+ Attention points 
+• MaxSamples: default is 100 
+• Entity: is not recursive $esx = Get-VMHost -Name ESX1 $start = (Get-Date).AddDays((-1) Get-VIEvent -MaxSamples ([int]::MaxValue) -Entity $esx -Start $start
+Events – Filtering I 
+ Get-VIEvent has limited filters 
+ Use a Where-clause on all returned objects 
+• Filtering done on your machine ! $esx = Get-VMHost -Name ESX1 $start = (Get-Date).AddDays((-1) Get-VIEvent -MaxSamples ([int]::MaxValue) -Entity $esx -Start $start | Where {$_ -is [VMware.Vim.VmDeployed]}
+Events Demo I DEMO
+Events – Filtering II 
+ Use EventHistoryCollector 
+• Filtering on vSphere Server 
+• More filtering options $esx = Get-VMHost -Name ESX1 $start = (Get-Date).AddDays((-1) Get-VIEventPlus -Entity $esx -Start $start -EventType “VmDeployed” Up to 80 times faster !
+Events Demo II DEMO
+
+Events – Which One ? 
+ The ‘regular’ events are in the SDK Reference 
+ Other, go via EventManager 
+ Or, use the Event-O-Matic !
+Events Demo III DEMO
+
+Community Question This stuff is MAGIC How do I take it further?
+
+Integration Next Steps 
+ PowerShell has many Snapins/Modules and doesn’t care what the technology is 
+• Microsoft 
+• CIM Cmdlets / Active Directory Cmdlets / Windows Cmdlets • 3rd Party 
+• NetApp / PernixData  Rest API 
+• Invoke-RestMethod 
+• Invoke-Webrequest  Read from files 
+• XML 
+• CSV 
+• TXT
+
+Further Automation of your Day to Day Tasks 
+ Do you do the same thing every day? 
+• Snapshot a VM to make sure its ok 
+ Do you love documentation? 
+• PowerGUI Export / PowerGUI Reports / Export to Word / Export-XLS 
+• CIM Demo 
+
+ Module for vShield 
+• REST API 
+
+ Other VMware products with Automation (Automation Triangle) 
+
+ Built-in with policies 
+ 1st choice 
+ Orchestration/workflows 
+ integration 
+ Scripts 
+ quick solutions 
+ Andy Troup blog article: http://url.vmware.com/j2g5
+Community Question Where do I go now?
+
+Where Do I Go Now 
+ Community 
+ Official PowerCLI Blog 
+ External PowerCLI Blogs 
+ New Developer Network 
+ Books 
+ Trainsignal Videos
+
+Take Aways 
+1. PowerCLI, a quick and easy tool for automating your “vTasks” 
+2. Take PowerCLI and Automation to the next level 
+3. Automating the components you didn’t think were possible 
+4. Combine everything you have learned
+
+PowerCLI Summary Additional Resources and references  PowerCLI Blog - http://blogs.vmware.com/vipowershell/  PowerCLI Download - http://vmware.com/go/PowerCLI  PowerCLI Documentation - http://vmware.com/support/developer/PowerCLI/  PowerShell Performance - http://powershell.com/cs/blogs/donjones/archive/2012/05/07/powershell- performance-it-s-the-dlr.aspx  Detailed PowerCLI cmdlet reference with examples - http://www.vmware.com/support/developer/PowerCLI/PowerCLI501/html/index.html  PowerCLI Community - http://communities.vmware.com/community/vmtn/server/vsphere/automationtools/powercli?view=discussions  vSphere Automation Blog - http://blogs.vmware.com/vsphere/automation/  Luc Dekens Blog – http://Lucd.info  Alan Renoufs Blog – http://virtu-al.net  Google ”PowerCLI”
+VMware vSphere™ PowerCLI
+What Else Do You Want from PowerCLI ? Before you ask, no I don’t know who this is! @alanrenouf and @LucD22 #VSVC4944 Q&A Winners will be tweeted back by me during VMworld Tweet a comment about this session to win!
+Other VMware Activities Related to This Session  HOL: HOL-SDC-1307 vCloud Automation Solutions  Group Discussions: VSVC1005-GD PowerCLI and Automation with Alan Renouf
+
+PowerCLI Best Practices - A Deep Dive Luc Dekens, Eurocontrol Alan Renouf, VMware VSVC4944 #VSVC4944
