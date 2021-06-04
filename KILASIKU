@@ -1,0 +1,114 @@
+#variables to work with
+start-transcript
+connect-viserver 172.1
+
+$datacenters=get-datacenter
+$DatacenterName=(get-datacenter).Name
+$NumClusters=((Get-cluster).count)
+$NumDataStores=((get-datastore).count)
+$NumHosts=((Get-VMhost).count)
+$NumVMs=((Get-VM).count)
+$PoweredONVMs=((Get-VM|where {$_.powerstate -eq "poweredon"}).count)
+$PoweredOffVMs=((Get-VM|where {$_.powerstate -eq "poweredoff"}).count)
+$NumVMTemplates=((get-template).count)
+$NumVMSnapshots=((get-vm|get-snapshot).count)
+$NumSnapshotsON=(((get-vm|get-snapshot)|where{$_.powerstate -eq "poweredon"}).count)
+$NumSnapshotsOff=((get-vm|get-snapshot|where {$_.powerstate -eq "poweredoff"}).count)
+$NumVMotions=(((get-cluster).ExtensionData.summary.NumVmotions|Measure-Object -Sum).sum)
+$NumVMotionsTargetBalance=(((get-cluster).ExtensionData.summary.TargetBalance|Measure-Object -Sum).sum)
+$NumVMotionsCurrentBalance=(((get-cluster).ExtensionData.summary.CUrrentBalance|Measure-Object -Sum).sum)
+$NumCPUCores=((get-cluster).ExtensionData.summary.Numcpucores|measure-object -sum).sum
+$NumEthernetCards=(((get-vm).ExtensionData.Summary.Config.NumEthernetCards).count)
+$NumNics=(((get-vmhost).extensiondata.summary.hardware.NumNics).count)
+$NumVirtualDisks=(((get-vm).Extensiondata.Summary.Config.NumVirtualDisks).count)
+$NumNetworks=((get-datacenter).extensiondata.network.count)
+$capacityDatastoreTB=((((get-datastore).CapacityGB|Measure-Object -sum).sum)/1024)
+$FreeSpaceTB=((((Get-Datastore).FreeSpaceGB|Measure-Object -sum).sum)/1024)
+$FreeSpacepct=(($FreeSpaceTB/$capacityDatastoreTB)*100)
+$UsedSpaceTB=$capacityDatastoreTB-$FreeSpaceTB
+$UsedSpacepct=((($capacityDatastoreTB-$FreeSpaceTB)/$capacityDatastoreTB)*100)
+$TotalCPUCapacityGhz=((((get-cluster).ExtensionData.summary.usagesummary.TotalCpuCapacityMhz|Measure-Object -Sum).sum)/1000)
+$CPUDemandGhz=((((get-cluster).ExtensionData.summary.usagesummary.CpuDemandMhz|Measure-Object -Sum).sum)/1000)
+$TotalMemoryGB=((((get-cluster).ExtensionData.summary.usagesummary.TotalMemCapacityMB|Measure-Object -Sum).sum)/1024)
+$MemoryDemandGB=((((get-cluster).ExtensionData.summary.usagesummary.MemDemandMB|Measure-Object -Sum).sum)/1024)
+$ScsiLun=((get-vmhost|Get-ScsiLun).count)
+$ScsiLunDisk=(((get-vmhost|Get-ScsiLun)|where{$_.Luntype -eq "disk"}).count)
+$ScsiLunEnclosure=(((get-vmhost|Get-ScsiLun)|where{$_.Luntype -eq "enclosure"}).count)
+$ScsiLunCDRom=(((get-vmhost|Get-ScsiLun)|where{$_.Luntype -eq "cdrom"}).count)
+$ScsilunCapacityGB=(((get-vmhost|Get-ScsiLun).CapacityGB|Measure-Object -Sum).sum)
+$ScsilunMinCapacityGB=(((get-vmhost|Get-ScsiLun).CapacityGB|Measure-Object -Minimum).Minimum)
+$ScsilunMaxCapacityGB=(((get-vmhost|Get-ScsiLun).CapacityGB|Measure-Object -Maximum).Maximum)
+$ScsilunAvgCapacityGB=(((get-vmhost|Get-ScsiLun).CapacityGB|Measure-Object -Average).Average)
+$HardDisksCount= ((get-vm|Get-HardDisk).count) 
+$HardDisksCapacityGB=(((get-vm|Get-HardDisk).CapacityGB|Measure-Object -Sum).Sum)
+$HardDisksMinCapacityGB=(((get-vm|Get-HardDisk).CapacityGB|Measure-Object -Minimum).Minimum)
+$HardDisksMaxCapacityGB=(((get-vm|Get-HardDisk).CapacityGB|Measure-Object -Maximum).Maximum)
+$HardDisksAvgCapacityGB=(((get-vm|Get-HardDisk).CapacityGB|Measure-Object -Average).Average)
+$vdswitch=((get-datacenter|get-vdswitch).count)
+$vdportg=((get-vdswitch|get-vdportgroup).count)
+$networkadapters=((get-vdportgroup|get-networkadapter).count)
+$virole=((get-virole).count)
+$configspath='T:\IT\CM\'
+
+#$vmhs=get-vmhost
+#$hbas=foreach(vmh in $vmhs){get-vmhost|get-vmhosthba
+<#  DATACENTER SUMMARY  #>
+
+$datacenter=foreach ($dc in $datacenters){Get-Datacenter $dc|select @{N="Datacentername";E={$_.Name}}, @{N="NumClusters";E={$NumClusters}},@{N="NUmHosts"; E={$NumHosts}},  @{N="TotalVMs"; E={$NumVMs}}, @{N="Datastores Count";E={$NumDataStores}}, @{N="PoweredONVMs"; E={$PoweredONVMs}},  @{N="PoweredOffVMs"; E={$PoweredOffVMs}}, @{N="NumVMTemplates";E={$NumVMTemplates}}, @{N="NumVMSnapshots";E={$NumVMSnapshots}},@{N="NumSnapShotsON";E={$NumSnapShotsON}}, @{N="NumSnapshotsOff";E={$NumSnapshotsOff}},@{N="NumVmotions";E={$NumVMotions}},@{N="VmotionsTargetBalance";E={$NumVMotionsTargetBalance}},@{N="VmotionCurrentBalance";E={$NumVMotionscurrentBalance}},@{N="NumCPUCores";E={$NumCPUCores}}, @{N="NumEthernetCards";E={$NumEthernetCards}}, @{N="NumNics";E={$NumNics}}, @{N="NumVirtualDisks";E={$NumVirtualDisks}}, @{N="NumNetworks";E={$NumNetworks}},@{N="CapacityDatastoreTB";E={[math]::round($capacityDatastoreTB,3)}},@{N="FreeSpaceTB";E={[math]::round($FreeSpaceTB,3)}},@{N="FreeSpacepct";E={[math]::round($FreeSpacepct,2)}},@{N="UsedSpaceTB";E={[math]::round($UsedSpaceTB,3)}},@{N="UsedSpacepct";E={[math]::round($UsedSpacepct,2)}}, @{N="CPUCapacityGhz";E={[math]::round($TotalCPUCapacityGhz,3)}},@{N="CPUDemandGhz";E={[math]::round($CPUDemandGhz,3)}}, @{N="TotalMemoryGB";E={[math]::round($TotalMemoryGB,3)}}, @{N="MemoryDemandGB";E={[math]::round($MemoryDemandGB,3)}}, @{N="ScsiLun Count";E={$ScsiLun}},@{N="ScsiLun LunType Disk";E={$ScsiLunDisk}},@{N="ScsiLun LunType Enclosure";E={$ScsiLunEnclosure}},@{N="ScsiLun LunType CDRom";E={$ScsiLunCDRom}},@{N="ScsilunCapacityGB";E={[math]::round($ScsilunCapacityGB,3)}} ,@{N="ScsilunMinCapacityGB";E={[math]::round($ScsilunMinCapacityGB,3)}} ,@{N="ScsilunMaxCapacityGB";E={[math]::round($ScsilunMaxCapacityGB,3)}},@{N="ScsilunAvgCapacityGB";E={[math]::round($ScsilunAvgCapacityGB,3)}},@{N="HardDisksCount";E={$HardDisksCount}},@{N="HardDisksCapacityGB";E={[math]::round($HardDisksCapacityGB,3)}},@{N="HardDisksMinCapacityGB";E={[math]::round($HardDisksMinCapacityGB,3)}},@{N="HardDisksMaxCapacityGB";E={[math]::round($HardDisksMaxCapacityGB,3)}},@{N="HardDisksAvgCapacityGB";E={[math]::round($HardDisksAvgCapacityGB,3)}},@{N="OverallStatus";E={$_.ExtensionData.OverallStatus}}, @{N="ConfigStatus";E={$_.ExtensionData.ConfigStatus }}}
+
+cls
+$datacenter|export-csv -Append $configspath'Datacenter-Summary.csv' -notypeinformation 
+cls
+
+<# IF THERE IS CHANGES IN THE OUTPUT ABOVE REGARDING VM EVENTS, YOU CAN INVESTIGATE FURTHER BY RUNNING THE FOLLOWING : #>
+
+$vmNM = get-vm
+$eventTYpes = 'VmCreatedEvent', 'VmClonedEvent', 'VmDeployedEvent', 'VmRegisteredEvent'
+$events=foreach($c in $vmNM){Get-VM -Name $c |ForEach-Object -Process {Get-VIEvent -Entity $_ -MaxSamples ([int]::MaxValue) |where{$eventTYpes -contains $_.GetType().Name } |Sort-Object -Property CreatedTime -Descending |Select -First 1 |   ForEach-Object -Process {
+New-Object PSObject -Property ([ordered]@{
+VM = $_.VM.Name
+CreatedTime = $_.CreatedTime
+User = $_.UserName
+EventType = $_.GetType().Name
+})}}}
+
+
+#stop-transcript
+#exit
+
+
+<##############################################################>
+start-transcript
+$outpath='U:\CM Plan\PPS\'
+$bgn=get-datacenter
+
+# To get a list of all registered vms
+$allvms=get-vm|sort -descending Powerstate, name
+
+<# To get a list of powered on vms with vmware tools running, do:
+
+$vms = Get-VM | where {$_.PowerState -eq "PoweredOn"} | Get-VMGuest | where {$_.State -eq "Running"}
+#>
+# To get vmname, Dnsname, ipaddress, cluster, vmhost, & OSFullName,  do,
+
+$ppp=foreach($v in $allvms){get-vm $v|where {$_.powerstate -eq "poweredon"}|get-vmguest|where{$_.state -eq "Running"}|select @{N="VMName";E={$v.name}}, @{N="IPADdress";E={$_.extensionData.ipaddress}}, @{N="DnsName";E={$_.Extensiondata.hostname}}, @{N="FOlder";E={$v.folder}}, @{N="Cluster";E={(get-cluster -vm $v).Name}}, @{N="VMHost";E={(Get-VMHost -VM $v).Name}}, @{N="OSFullName";E={$_.OSFullName}}}
+
+$ppp|sort VMHost, VMName|export-csv $outpath$bgn'-PPS-VMs.csv' -NotypeInformation
+
+<#  To get a list of applications running on a vm  #>
+
+$ppsvmapps=foreach($a in $allvms){Get-VM $a|select @{N="VMName";E={$v.name}}|ForEach-Object{get-wmiobject win32_product|select @{N="VMName";E={$v.name}}, @{N="ApplicationName";E={$_.name}}, Version, Vendor, InstallDate}}
+
+
+<# TO GET VM EVENTS DO #>
+
+$vmName = '*'
+$eventTYpes = 'VmCreatedEvent', 'VmClonedEvent', 'VmDeployedEvent', 'VmRegisteredEvent'
+Get-VM -Name $vmName |ForEach-Object -Process {Get-VIEvent -Entity $_ -MaxSamples ([int]::MaxValue) |where{$eventTYpes -contains $_.GetType().Name } |Sort-Object -Property CreatedTime -Descending |Select -First 1 |   ForEach-Object -Process {
+New-Object PSObject -Property ([ordered]@{
+VM = $_.VM.Name
+CreatedTime = $_.CreatedTime
+User = $_.UserName
+EventType = $_.GetType().Name
+})}}
+
