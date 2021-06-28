@@ -1,0 +1,3 @@
+netstat -an |find /i "listening"
+
+A list of open ports displays on the screen.
