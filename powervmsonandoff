@@ -1,0 +1,34 @@
+Part 1 – Shutdown all VMs from the list „C:\temp\vmliste.txt“
+ 
+
+foreach($vmlist in (Get-Content -Path C:\TEMP\vmliste.txt)){
+$vm = Get-VM -Name $vmlist
+Shutdown-VMGuest -VM $vm -Confirm:$false
+}
+
+Part 2 – Generate a .csv report with the powerstate of the listed VMs:
+ 
+
+$powerstate = @()
+
+foreach($vmlist in (Get-Content -Path C:\temp\vmliste.txt)){
+
+$vm = Get-VM -Name $vmlist
+
+$powerstate += (Get-VM $vm |
+
+Select Name,PowerState,
+
+@{N=’VMHost’;E={$_.VMHost.Name}})
+
+}
+
+$powerstate | Export-Csv -Path C:\temp\powerstate_report.csv -NoTypeInformation -UseCulture
+
+Part 3 – Power on all VMs from the list „C:\temp\vmliste.txt“
+ 
+
+foreach($vmlist in (Get-Content -Path C:\TEMP\vmliste.txt)){
+$vm = Get-VM -Name $vmlist
+Start-VM -VM $vm -Confirm:$false
+}
